@@ -88,7 +88,7 @@ def generate_response(query, dataframe):
     """Genera una respuesta con el modelo Gemma y lógica estricta."""
     
     # --- CAMBIO DE MODELO A GEMMA ---
-    model_generation = genai.GenerativeModel('models/gemma-2b-it') # Usamos el modelo Gemma
+    model_generation = genai.GenerativeModel('models/gemma-3-12b-it') # Usamos el modelo Gemma
     
     # --- LÓGICA DE BÚSQUEDA Y RESPUESTA ESTRICTA ---
     exercise_id = extract_exercise_id(query)
