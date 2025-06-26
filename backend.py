@@ -1,14 +1,11 @@
 # -------------------
-# LIBRERÍAS
+# LIBRERÍAS (Versión Simplificada)
 # -------------------
 import streamlit as st
 import google.generativeai as genai
 import pandas as pd
 import numpy as np
 import re
-from PIL import Image
-import io
-import requests # Necesitamos requests de nuevo
 
 # -------------------
 # CONFIGURACIÓN DE LA PÁGINA Y API
@@ -20,7 +17,7 @@ try:
     GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=GEMINI_API_KEY)
 except KeyError:
-    st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en los secrets de Streamlit.")
+    st.error("⚠️ No se encontró la GEMINI_API_KEY.")
     st.stop()
 
 # -------------------
@@ -29,11 +26,9 @@ except KeyError:
 @st.cache_data(ttl=3600)
 def load_knowledge_base():
     """Lee el CSV desde una URL fija de GitHub."""
-    csv_url = "https://raw.githubusercontent.com/cbastianM/prueba-ia/main/Conocimiento_Ing_Civil.csv"
+    csv_url = "https://raw.githubusercontent.com/cbastianM/prueba-ia/main/base_conocimiento.csv"
     try:
-        # skipinitialspace=True ayuda a limpiar espacios después de las comas
         df = pd.read_csv(csv_url, skipinitialspace=True)
-        # Reemplaza valores nulos (NaN) por strings vacíos
         df.fillna('', inplace=True)
         return df
     except Exception as e:
@@ -41,72 +36,55 @@ def load_knowledge_base():
         return None
 
 # -------------------
-# LÓGICA DEL CHATBOT
+# LÓGICA DEL CHATBOT (SIMPLIFICADA)
 # -------------------
 def generate_response(query, dataframe):
-    """Genera una respuesta, buscando el ejercicio y descargando la imagen si existe."""
-    
-    # Limpieza de la búsqueda
+    """
+    Genera una respuesta de texto y una cadena Markdown para mostrar la imagen.
+    """
+    # Limpieza y búsqueda de la fila
     query_cleaned = query.strip().lower()
-    
-    # Búsqueda robusta
     match_df = dataframe[dataframe['ID_Ejercicio'].str.strip().str.lower() == query_cleaned]
     
     if match_df.empty:
-        return f"Lo siento, no pude encontrar el ejercicio '{query}'. Por favor, asegúrate de escribir el identificador exacto (ej: 'ejercicio 1.1').", []
+        return f"Lo siento, no pude encontrar el ejercicio '{query}'. Por favor, asegúrate de escribir el ID exacto (ej: 'ejercicio 1.1').", ""
 
     match_row = match_df.iloc[0]
 
-    # --- PROCESAMIENTO DE IMÁGENES (CON LIMPIEZA DE URL) ---
+    # --- LÓGICA DE IMAGEN CON MARKDOWN ---
     context_text = match_row['Contenido']
     image_url = match_row['URL_Imagen']
-    images_to_display = []
+    image_markdown = "" # String vacío por defecto
     
     if image_url and isinstance(image_url, str):
-        # --- ¡SOLUCIÓN CLAVE! ---
-        # Limpiamos la URL de espacios y cualquier comilla que pueda tener
+        # Limpiamos la URL por si acaso
         cleaned_url = image_url.strip().strip("'\"")
-        
-        try:
-            response = requests.get(cleaned_url)
-            response.raise_for_status() # Lanza un error si la descarga falla
-            img = Image.open(io.BytesIO(response.content))
-            images_to_display.append(img)
-        except Exception as e:
-            # Si falla la descarga, añadimos un aviso al texto de la respuesta
-            context_text += f"\n\n**(Aviso del sistema: No se pudo cargar la imagen asociada. Error: {e})**"
+        # Creamos la cadena de Markdown para la imagen
+        image_markdown = f"![Diagrama del Ejercicio]({cleaned_url})"
             
-    # --- GENERACIÓN DE LA RESPUESTA DE LA IA ---
-    model = genai.GenerativeModel('gemini-2.5-flash')
-    prompt_parts = [
-        f"""
-        **ROL:** Eres un profesor de Ingeniería Civil.
-        **TAREA:** Explica la solución al ejercicio basándote en la información y la imagen proporcionadas.
-        **PREGUNTA DEL USUARIO:** {query}
-        **INFORMACIÓN DE LA SOLUCIÓN:** {context_text}
-        
-        **INSTRUCCIONES:**
-        1.  Describe la solución encontrada en 'INFORMACIÓN DE LA SOLUCIÓN'.
-        2.  Si hay una imagen, analízala y úsala para enriquecer tu explicación. Di "Como se ve en el diagrama..." o algo similar.
-        3.  Formatea tu respuesta con Markdown y ecuaciones en LaTeX.
-        
-        **TU EXPLICACIÓN:**
-        """
-    ]
+    # --- GENERACIÓN DE LA RESPUESTA DE LA IA (SOLO TEXTO) ---
+    model = genai.GenerativeModel('gemini-1.5-flash-latest') # Usamos un modelo más rápido y económico
     
-    # Añadimos las imágenes (si las hay) al prompt para la IA
-    if images_to_display:
-        prompt_parts.extend(images_to_display)
-
+    prompt = f"""
+    **ROL:** Eres un profesor de Ingeniería Civil.
+    **TAREA:** Explica la solución al ejercicio basándote en la siguiente información. Tu explicación debe ser clara y usar formato Markdown y LaTeX.
+    
+    **PREGUNTA DEL USUARIO:** {query}
+    **INFORMACIÓN DE LA SOLUCIÓN:** {context_text}
+    
+    **TU EXPLICACIÓN:**
+    """
+    
     try:
-        response = model.generate_content(prompt_parts)
-        # Devolvemos el texto de la IA y las imágenes que ya descargamos para mostrar
-        return response.text, images_to_display
+        response = model.generate_content(prompt)
+        # Devolvemos el texto de la IA y la cadena de Markdown para la imagen
+        return response.text, image_markdown
     except Exception as e:
-        return f"Error al contactar a la IA: {e}", images_to_display
+        return f"Error al contactar a la IA: {e}", image_markdown
+
 
 # -------------------
-# INTERFAZ DE USUARIO
+# INTERFAZ DE USUARIO (SIMPLIFICADA)
 # -------------------
 df_knowledge = load_knowledge_base()
 
@@ -117,10 +95,7 @@ if df_knowledge is not None:
 
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            if message.get("images"):
-                for img in message["images"]:
-                    st.image(img, use_column_width=True)
-            st.markdown(message["content"])
+            st.markdown(message["content"]) # st.markdown mostrará tanto el texto como la imagen
 
     if prompt := st.chat_input("Escribe el ID del ejercicio (ej: ejercicio 1.1)"):
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -129,15 +104,15 @@ if df_knowledge is not None:
 
         with st.chat_message("assistant"):
             with st.spinner("Preparando la explicación..."):
-                response_text, response_images = generate_response(prompt, df_knowledge)
+                response_text, image_markdown = generate_response(prompt, df_knowledge)
             
-            if response_images:
-                for img in response_images:
-                    st.image(img, use_column_width=True)
+            # Combinamos el markdown de la imagen con el texto de la respuesta
+            full_response = f"{image_markdown}\n\n{response_text}"
             
-            st.markdown(response_text)
+            st.markdown(full_response)
             
-            assistant_message = {"role": "assistant", "content": response_text, "images": response_images}
+            # Guardamos la respuesta completa en el historial
+            assistant_message = {"role": "assistant", "content": full_response}
             st.session_state.messages.append(assistant_message)
 else:
     st.error("La aplicación no puede iniciar porque no se pudo cargar la base de conocimiento.")
