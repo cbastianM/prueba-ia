@@ -102,10 +102,7 @@ def generate_response(query, dataframe):
             # Si se encuentra, el contexto es ÚNICAMENTE la solución
             context = match.iloc[0]['Contenido']
             prompt = f"""
-            Tu única tarea es transcribir la siguiente solución. No añadas introducciones, despedidas, o explicaciones adicionales. No digas "La solución es:".
-            Simplemente presenta el texto de la solución tal cual se te proporciona.
-
-            **Solución a Transcribir:**
+            Tu única es buscar la  solución propuesta en la base de datos .
             ---
             {context}
             ---
