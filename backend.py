@@ -96,64 +96,72 @@ def extract_exercise_id(query):
     return None
 
 def generate_response(query, dataframe):
-    """Genera una respuesta con el modelo Gemini y la persona de un profesor que usa Markdown."""
+    """
+    Genera una respuesta interactiva y didáctica, usando la base de datos como
+    única fuente de conocimiento, pero con la libertad de explicar y razonar.
+    """
     model_generation = genai.GenerativeModel('gemini-1.5-flash-latest')
     
-    # ESTRATEGIA 1: Búsqueda por ID de ejercicio (Prioritaria)
+    # La búsqueda de contexto sigue un proceso similar, pero el prompt cambia todo.
+    # Primero, buscamos el contexto más relevante.
+    
+    # Paso 1: Intentar encontrar un ID de ejercicio.
     exercise_id = extract_exercise_id(query)
     if exercise_id:
         match = dataframe[dataframe['ID_Ejercicio'].str.strip().str.upper() == exercise_id.upper()]
-        if not match.empty:
+        if match.empty:
+            # Si se menciona un ID pero no se encuentra, paramos aquí.
+            return f"Lo siento, he buscado en mis apuntes pero no tengo información sobre el ejercicio '{exercise_id}'. ¿Puedo ayudarte con otro tema?"
+        else:
+            # Si se encuentra, usamos ese contexto específico.
             context = match.iloc[0]['Contenido']
             libro = match.iloc[0]['Libro']
-            
-            # --- PROMPT MEJORADO PARA EJERCICIOS ---
-            prompt = f"""
-            Eres un profesor de Ingeniería Civil. Tu tarea es explicar la solución al ejercicio "{exercise_id}" del libro "{libro}".
-            Usa el siguiente texto como base para tu explicación.
+            tema = match.iloc[0]['Tema']
+            context_source = f"el ejercicio {exercise_id} del libro {libro} sobre {tema}"
+    else:
+        # Paso 2: Si no hay ID, hacer una búsqueda semántica para encontrar los fragmentos más relevantes.
+        query_embedding = genai.embed_content(model='models/embedding-001', content=query, task_type="RETRIEVAL_QUERY")["embedding"]
+        
+        dataframe['Embedding'] = dataframe['Embedding'].apply(np.array)
+        knowledge_embeddings = np.stack(dataframe['Embedding'].values)
+        dot_products = np.dot(knowledge_embeddings, query_embedding)
+        
+        # Obtenemos los 2 fragmentos más relevantes para dar más riqueza al contexto.
+        top_indices = np.argsort(dot_products)[-2:][::-1]
+        
+        # Umbral de similitud para asegurar relevancia.
+        similarity_threshold = 0.7
+        if np.max(dot_products) < similarity_threshold:
+            return "Lo siento, no he encontrado información suficientemente relevante sobre ese tema en mi base de conocimiento actual para darte una respuesta confiable."
 
-            **Instrucciones de formato para tu respuesta:**
-            1.  Usa Markdown para estructurar la respuesta (títulos con '#', negritas con '**', listas con '*').
-            2.  **MUY IMPORTANTE:** Cualquier fórmula matemática o ecuación debe ser formateada usando LaTeX.
-                - Para fórmulas en la misma línea, usa un signo de dólar: $ E = mc^2 $.
-                - Para fórmulas en su propia línea, usa dos signos de dólar: $$ V = \frac{{1}}{{n}} R_h^{{2/3}} S^{{1/2}} $$
-            3.  Explica los conceptos de forma clara y didáctica, basándote únicamente en el contexto proporcionado.
+        # Unimos los fragmentos de contexto encontrados.
+        relevant_passages = dataframe.iloc[top_indices]['Contenido'].tolist()
+        context = "\n\n---\n\n".join(relevant_passages)
+        context_source = "mis apuntes de la base de conocimiento"
 
-            **Tu explicación como profesor, usando Markdown y LaTeX:**
-            """
-            response = model_generation.generate_content(prompt)
-            return response.text
-        else:
-            return f"Lo siento, he buscado en mi base de conocimiento pero no tengo información sobre el ejercicio '{exercise_id}'. Te recomiendo consultar tu libro de texto."
-
-    # ESTRATEGIA 2: Búsqueda semántica para preguntas teóricas
-    query_embedding = genai.embed_content(model='models/embedding-001', content=query, task_type="RETRIEVAL_QUERY")["embedding"]
-    
-    dataframe['Embedding'] = dataframe['Embedding'].apply(np.array)
-    knowledge_embeddings = np.stack(dataframe['Embedding'].values)
-    dot_products = np.dot(knowledge_embeddings, query_embedding)
-    
-    similarity_threshold = 0.7 
-    if np.max(dot_products) < similarity_threshold:
-        return "Lo siento, no he encontrado información suficientemente relevante sobre ese tema en mi base de conocimiento actual."
-
-    top_index = np.argmax(dot_products)
-    context = dataframe.iloc[top_index]['Contenido']
-    
-    # --- PROMPT MEJORADO PARA TEORÍA ---
+    # --- EL NUEVO PROMPT INTELIGENTE ---
+    # Este prompt le da al modelo el poder de ser un verdadero profesor.
     prompt = f"""
-    Eres un profesor de Ingeniería Civil experto en comunicación visual. Un estudiante te ha hecho la siguiente pregunta.
-    Usa ÚNICA Y EXCLUSIVAMENTE el siguiente texto de contexto para formular tu explicación.
+    Eres un profesor de Ingeniería Civil amable, paciente y muy didáctico.
+    Tu misión es responder a la pregunta de un estudiante.
 
-    **Instrucciones de formato para tu respuesta:**
-    1.  Usa Markdown para estructurar la respuesta (títulos con '#', negritas con '**', listas con '*').
-    2.  **MUY IMPORTANTE:** Cualquier fórmula matemática o ecuación debe ser formateada usando LaTeX.
-        - Para fórmulas en la misma línea, usa un signo de dólar: $ \sigma = P/A $.
-        - Para fórmulas en su propia línea, usa dos signos de dólar: $$ \Sigma F_x = 0 $$
-    3.  Explica el concepto de forma clara, concisa y didáctica.
+    **Tus Reglas de Oro:**
+    1.  **Fuente de Verdad Única:** Debes basar tu respuesta ÚNICA Y EXCLUSIVAMENTE en la siguiente "Información de Contexto". No puedes usar conocimiento externo ni inventar datos. Tu conocimiento se limita a lo que está escrito abajo.
+    2.  **Sé un Profesor, no un Loro:** No te limites a copiar el texto. Debes explicarlo, simplificarlo, compararlo o usarlo para responder directamente a la pregunta específica del usuario. Adáptate al tono y la intención de la pregunta.
+    3.  **Formato Profesional:** Usa Markdown para que tu respuesta sea clara y fácil de leer. Utiliza negritas, listas y, sobre todo, formatea las ecuaciones con LaTeX ($...$ para inline, $$...$$ para bloque).
+    4.  **Si no puedes, dilo:** Si la pregunta del estudiante requiere información que no está en el contexto (por ejemplo, comparar con un tema ausente o realizar un cálculo para el cual no tienes los datos), debes indicarlo amablemente diciendo algo como: "Esa es una excelente pregunta, pero mi conocimiento actual sobre este tema se basa solo en {context_source} y no incluye esa información específica."
 
-    **Tu explicación como profesor, usando Markdown y LaTeX:**
+    ---
+    **Información de Contexto (Tu única fuente de verdad):**
+    {context}
+    ---
+
+    **Pregunta del Estudiante:**
+    {query}
+
+    **Tu Respuesta como Profesor:**
     """
+    
     response = model_generation.generate_content(prompt)
     return response.text
 
