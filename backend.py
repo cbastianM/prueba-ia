@@ -109,7 +109,7 @@ def generate_response(query, dataframe):
             
             # --- PROMPT MEJORADO PARA EJERCICIOS ---
             prompt = f"""
-            Eres un profesor de Ingeniería Civil experto en comunicación visual. Tu tarea es explicar la solución al ejercicio "{exercise_id}" del libro "{libro}".
+            Eres un profesor de Ingeniería Civil. Tu tarea es explicar la solución al ejercicio "{exercise_id}" del libro "{libro}".
             Usa el siguiente texto como base para tu explicación.
 
             **Instrucciones de formato para tu respuesta:**
@@ -118,11 +118,6 @@ def generate_response(query, dataframe):
                 - Para fórmulas en la misma línea, usa un signo de dólar: $ E = mc^2 $.
                 - Para fórmulas en su propia línea, usa dos signos de dólar: $$ V = \frac{{1}}{{n}} R_h^{{2/3}} S^{{1/2}} $$
             3.  Explica los conceptos de forma clara y didáctica, basándote únicamente en el contexto proporcionado.
-
-            **Contexto de la Solución:**
-            ---
-            {context}
-            ---
 
             **Tu explicación como profesor, usando Markdown y LaTeX:**
             """
@@ -157,11 +152,6 @@ def generate_response(query, dataframe):
         - Para fórmulas en su propia línea, usa dos signos de dólar: $$ \Sigma F_x = 0 $$
     3.  Explica el concepto de forma clara, concisa y didáctica.
 
-    **Contexto Relevante:**
-    ---
-    {context}
-    ---
-    **Pregunta del Estudiante:** {query}
     **Tu explicación como profesor, usando Markdown y LaTeX:**
     """
     response = model_generation.generate_content(prompt)
