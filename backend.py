@@ -1,72 +1,321 @@
+# -------------------
+# LIBRERÍAS
+# -------------------
 import streamlit as st
+import google.generativeai as genai
 import pandas as pd
+import numpy as np
+import re
+import requests
+from PIL import Image
+import io
+# -------------------
+# CONFIGURACIÓN DE LA PÁGINA Y API
+# -------------------
+st.set_page_config(
+    page_title="Tu Profesor de Ing. Civil",
+    page_icon="🎓",
+    layout="centered" # Un layout más enfocado para chat
+)
 
-st.set_page_config(page_title="Diagnóstico Final", layout="wide")
-st.title("🕵️‍♂️ Diagnóstico Final de Lectura de Datos")
+st.title("🎓 Tu Profesor Virtual de Ingeniería Civil")
+st.markdown("Hazme una pregunta sobre un tema o pide la explicación de un ejercicio de la base de conocimiento.")
 
-# --- FUNCIÓN DE CARGA DE DATOS ---
-@st.cache_data(ttl=60)
-def load_data():
-    csv_url = "https://raw.githubusercontent.com/cbastianM/prueba-ia/main/Conocimiento_Ing_Civil.csv"
+# Cargar la API Key desde los secrets de Streamlit
+try:
+    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=GEMINI_API_KEY)
+except (FileNotFoundError, KeyError):
+    st.error("⚠️ No se encontró la GEMINI_API_KEY. Por favor, configúrala en los secrets de Streamlit Cloud.")
+    st.stop()
+
+# -------------------
+# BASE DE CONOCIMIENTO (DATOS DENTRO DEL CÓDIGO)
+# -------------------
+
+# Reemplaza tu antigua función get_knowledge_base() por esta:
+
+@st.cache_resource
+def get_knowledge_base():
+    """
+    Lee un archivo CSV desde una URL pública (GitHub), lo convierte a DataFrame
+    y genera los embeddings. Retorna el DataFrame procesado.
+    """
+    # --- CONSTRUYE LA URL DEL ARCHIVO CSV EN GITHUB ---
+    # Reemplaza 'tu_usuario_github', 'tu_repositorio' y 'main' si es necesario.
+    github_user = "cbastianM"
+    github_repo = "prueba-ia"
+    branch_name = "main" # O 'master', dependiendo de tu repositorio
+    file_path = "Conocimiento_Ing_Civil.csv"
+
+    csv_url = f"https://raw.githubusercontent.com/cbastianM/prueba-ia/refs/heads/main/Conocimiento_Ing_Civil.csv"
+
     try:
-        # Añadimos 'skipinitialspace=True' para que pandas limpie los espacios al leer
-        df = pd.read_csv(csv_url, skipinitialspace=True)
+        # Lee el archivo CSV directamente desde la URL
+        df = pd.read_csv(csv_url)
+        
+        # Limpieza de datos: reemplaza valores nulos (NaN) por strings vacíos
         df.fillna('', inplace=True)
+        
+        # Generación de embeddings
+        model_embedding = 'models/embedding-001'
+        
+        # Usamos una barra de progreso para dar feedback al usuario durante la carga inicial
+        progress_bar = st.progress(0, text="Analizando base de conocimiento...")
+        
+        def get_embedding(text, index):
+            # Actualiza la barra de progreso
+            progress_bar.progress((index + 1) / len(df), text=f"Procesando entrada {index+1}/{len(df)}...")
+            if not isinstance(text, str) or not text.strip():
+                return [0.0] * 768
+            return genai.embed_content(
+                model=model_embedding, content=text, task_type="RETRIEVAL_DOCUMENT")["embedding"]
+
+        # Aplica la función de embedding
+        df['Embedding'] = [get_embedding(row['Contenido'], i) for i, row in df.iterrows()]
+        
+        # Limpia la barra de progreso una vez terminado
+        progress_bar.empty()
+        
         return df
+
     except Exception as e:
-        st.error(f"❌ ERROR AL LEER EL CSV DESDE GITHUB: {e}")
+        st.error(f"Error al cargar o procesar el archivo CSV desde GitHub: {e}")
+        st.warning("Verifica que la URL sea correcta y que el archivo CSV esté en el repositorio.")
         return None
 
-# --- EJECUCIÓN PRINCIPAL ---
-df = load_data()
 
-if df is not None:
-    st.success("✅ Archivo CSV cargado en un DataFrame de Pandas.")
-    
-    st.header("1. Contenido del DataFrame Cargado")
-    st.dataframe(df)
-    
-    st.header("2. Prueba de Búsqueda Manual")
-    search_id = st.text_input("ID del Ejercicio a buscar:")
-    
-    if st.button("Buscar"):
-        if search_id:
-            # --- LÓGICA DE BÚSQUEDA MEJORADA ---
-            # Limpiamos la entrada del usuario de la misma forma
-            query_cleaned = search_id.strip().lower()
-            
-            # Aplicamos la misma limpieza a la columna del DataFrame para la comparación
-            # .str.strip() quita espacios al inicio y al final
-            # .str.lower() convierte a minúsculas
-            match_df = df[df['ID_Ejercicio'].str.strip().str.lower() == query_cleaned]
-            # --- FIN DE LA LÓGICA MEJORADA ---
+# -------------------
+# LÓGICA DEL CHATBOT MULTIMODAL
+# -------------------
+def extract_exercise_id(query):
+    """
+    Extrae un ID de ejercicio de la pregunta del usuario.
+    Puede reconocer dos formatos:
+    1. Nombre del libro + número (ej: "Beer 2.43")
+    2. Palabra "ejercicio" + número (ej: "ejercicio 1.1")
+    """
+    query_lower = query.lower()
 
-            st.divider()
+    # FORMATO 1: Buscar "ejercicio" o "problema" seguido de un número
+    exercise_pattern = re.compile(r'\b(ejercicio|problema)\s+(\d+\.\d+)\b', re.IGNORECASE)
+    exercise_match = exercise_pattern.search(query_lower)
+    if exercise_match:
+        # Reconstruimos el ID para que coincida con la base de datos, ej: "ejercicio 1.1"
+        return f"{exercise_match.group(1)} {exercise_match.group(2)}"
+
+    # FORMATO 2: Buscar nombre del libro + número (como respaldo)
+    books = ["beer", "hibbeler", "singer", "gere", "chopra", "irving"]
+    book_pattern = re.compile(
+        r'\b(' + '|'.join(books) + r')[\s\w\.]*(\d+[\.\-]\d+)\b', re.IGNORECASE)
+    book_match = book_pattern.search(query_lower)
+    if book_match:
+        # Devolvemos el formato "LIBRO NUMERO" que se buscará en la columna 'Libro'
+        book_name = book_match.group(1).upper()
+        exercise_num = book_match.group(2).replace('-', '.')
+        return f"{book_name} {exercise_num}"
+        
+    return None
+
+def generate_response(query, dataframe):
+    """
+    Genera una respuesta multimodal.
+    Busca el ID en la columna 'ID_Ejercicio' o 'Libro' según el formato.
+    """
+    model_generation = genai.GenerativeModel('gemma-3-12b-it')
+    
+    # --- BÚSQUEDA DE CONTEXTO ---
+    extracted_id = extract_exercise_id(query)
+    match_row = None
+    
+    if extracted_id:
+        # Comprobamos si el ID extraído empieza con "ejercicio" o "problema"
+        if extracted_id.lower().startswith(('ejercicio', 'problema')):
+            # --- CAMINO A: Búsqueda por ID de Ejercicio ---
+            print(f"DEBUG: Buscando en columna 'ID_Ejercicio' por '{extracted_id}'")
+            match_df = dataframe[dataframe['ID_Ejercicio'].str.strip().str.lower() == extracted_id.lower()]
             if not match_df.empty:
-                st.success(f"✅ ¡MATCH ENCONTRADO PARA '{search_id}'!")
                 match_row = match_df.iloc[0]
-                
-                st.subheader("Datos de la Fila Encontrada:")
-                st.write(match_row)
-                
-                st.subheader("Intento de mostrar la imagen:")
-                image_data = match_row['URL_Imagen']
-                
-                if image_data and isinstance(image_data, str) and image_data.strip():
-                    st.write("Se encontró contenido en la columna 'URL_Imagen'. Intentando mostrarla:")
-                    try:
-                        st.image(image_data, caption="Imagen cargada")
-                        st.success("¡La imagen se mostró correctamente!")
-                    except Exception as e:
-                        st.error(f"FALLO al intentar mostrar la imagen. Error: {e}")
-                else:
-                    st.warning("La columna 'URL_Imagen' para esta fila está vacía.")
-            else:
-                st.error(f"❌ NO SE ENCONTRÓ MATCH PARA '{search_id}'.")
-                st.warning("Verifica que el ID exista en la tabla de arriba.")
-                # Mostramos los valores limpios de la columna para ver si hay algún problema
-                st.write("Valores limpios disponibles en 'ID_Ejercicio':", df['ID_Ejercicio'].str.strip().str.lower().tolist())
         else:
-            st.warning("Por favor, escribe un ID para buscar.")
+            # --- CAMINO B: Búsqueda por Nombre de Libro ---
+            print(f"DEBUG: Buscando en columna 'Libro' por '{extracted_id}'")
+            match_df = dataframe[dataframe['Libro'].str.strip().str.upper() == extracted_id.upper()]
+            if not match_df.empty:
+                match_row = match_df.iloc[0]
+    else:
+        # --- CAMINO C: Búsqueda Semántica (si no hay ID) ---
+        print(f"DEBUG: No se encontró ID. Realizando búsqueda semántica.")
+        query_embedding = genai.embed_content(model='models/embedding-001', content=query, task_type="RETRIEVAL_QUERY")["embedding"]
+        dataframe['Embedding'] = dataframe['Embedding'].apply(np.array)
+        knowledge_embeddings = np.stack(dataframe['Embedding'].values)
+        dot_products = np.dot(knowledge_embeddings, query_embedding)
+        
+        similarity_threshold = 0.7
+        if np.max(dot_products) >= similarity_threshold:
+            top_index = np.argmax(dot_products)
+            match_row = dataframe.iloc[top_index]
+
+    # --- PROCESAMIENTO DE IMÁGENES ---
+    context_text = match_row['Contenido']
+    image_url = match_row['URL_Imagen']
+    images_to_display = []
+    
+    if image_url:
+        try:
+            # Descargamos la imagen desde la URL corregida
+            response = requests.get(image_url)
+            response.raise_for_status() # Lanza un error si la descarga falla
+            img = Image.open(io.BytesIO(response.content))
+            images_to_display.append(img)
+        except Exception as e:
+            # Si falla la descarga, añadimos un aviso al texto de la respuesta
+            context_text += f"\n\n(Aviso: No se pudo cargar la imagen asociada. Error: {e})"
+            
+    # --- GENERACIÓN DE LA RESPUESTA DE LA IA ---
+    # En este modelo simple, solo mostramos el contenido y la imagen
+    # No estamos usando la IA para generar texto, solo para mostrar los datos.
+    # Esto nos ayuda a confirmar que la lectura de datos funciona.
+    
+    # El "response_text" es simplemente el contenido de la base de datos
+    response_text = f"**{match_row['Libro']}**\n\n{context_text}"
+    
+    return response_text, images_to_display
+
+    # --- PROCESAMIENTO DE IMÁGENES ---
+    context_text = match_row['Contenido']
+    image_url = match_row['URL_Imagen']
+    images_to_display = []
+    
+    if image_url:
+        try:
+            # Descargamos la imagen desde la URL corregida
+            response = requests.get(image_url)
+            response.raise_for_status() # Lanza un error si la descarga falla
+            img = Image.open(io.BytesIO(response.content))
+            images_to_display.append(img)
+        except Exception as e:
+            # Si falla la descarga, añadimos un aviso al texto de la respuesta
+            context_text += f"\n\n(Aviso: No se pudo cargar la imagen asociada. Error: {e})"
+            
+    # --- GENERACIÓN DE LA RESPUESTA DE LA IA ---
+    # En este modelo simple, solo mostramos el contenido y la imagen
+    # No estamos usando la IA para generar texto, solo para mostrar los datos.
+    # Esto nos ayuda a confirmar que la lectura de datos funciona.
+    
+    # El "response_text" es simplemente el contenido de la base de datos
+    response_text = f"**{match_row['Libro']}**\n\n{context_text}"
+    
+    return response_text, images_to_display
+
+    # Si no se encontró ningún contenido relevante, devuelve un mensaje
+    if match_row is None:
+        if extracted_id:
+            return f"Lo siento, no he encontrado una entrada para '{extracted_id}' en mi base de conocimiento.", []
+        else:
+            return "Lo siento, no he encontrado información relevante sobre ese tema en mi base de conocimiento.", []
+
+    # --- LÓGICA MULTIMODAL (esta parte no necesita cambios) ---
+    context_text = match_row['Contenido']
+    image_urls_str = match_row["URL_Imagen"]
+    
+    prompt_parts = []
+    images_to_display = []
+
+    prompt_text = f"""
+    Eres un profesor de Ingeniería Civil. Analiza el siguiente texto y, si se proporcionan imágenes, úsalas para explicar la pregunta del estudiante.
+
+    **Contexto:**
+    {context_text}
+
+    **Pregunta:**
+    {query}
+
+    **Instrucciones Clave:**
+    1.  Si hay imágenes, tu explicación DEBE hacer referencia a ellas. Describe lo que muestran y cómo se relacionan con el tema. Usa frases como "En la primera imagen vemos...", "La segunda imagen ilustra...", etc.
+    2.  Si no hay imágenes, responde basándote solo en el texto.
+    3.  Explica los conceptos con claridad, formato Markdown y ecuaciones en LaTeX ($...$$).
+
+    **Tu Explicación:**
+    """
+    prompt_parts.append(prompt_text)
+
+    if image_urls_str and isinstance(image_urls_str, str) and image_urls_str.strip():
+        image_urls = image_urls_str.split('|')
+        for url in image_urls:
+            try:
+                response = requests.get(url.strip())
+                response.raise_for_status()
+                img = Image.open(io.BytesIO(response.content))
+                prompt_parts.append(img)
+                images_to_display.append(img)
+            except Exception as e:
+                print(f"Error al descargar la imagen: {e}")
+
+    try:
+        response_ai = model_generation.generate_content(prompt_parts)
+        return response_ai.text, images_to_display
+    except Exception as e:
+        return f"Ocurrió un error al generar la respuesta: {e}", []
+
+# -------------------
+# INTERFAZ DE USUARIO PRINCIPAL (Versión Robusta para Imágenes)
+# -------------------
+df_knowledge = get_knowledge_base()
+
+# La aplicación solo continúa si la base de conocimiento se cargó correctamente.
+if df_knowledge is not None:
+    # Este mensaje solo aparece si get_knowledge_base() fue exitoso.
+    # st.success("✅ Base de conocimiento lista. Iniciando chat...")
+
+    # Inicializa el historial del chat si no existe.
+    if 'messages' not in st.session_state:
+        st.session_state.messages = [{"role": "assistant", "content": "¡Hola! Soy tu profesor virtual. ¿En qué puedo ayudarte hoy?"}]
+
+    # --- BUCLE 1: Dibuja todo el historial de chat existente ---
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            # Comprueba si hay una lista de imágenes en este mensaje del historial.
+            # Usamos .get() para evitar errores si la clave "images" no existe.
+            if message.get("images"):
+                # Si la clave "images" existe y tiene contenido, itera y muestra cada imagen.
+                for img in message["images"]:
+                    st.image(img, use_column_width=True)
+            
+            # Siempre muestra el contenido de texto.
+            st.markdown(message["content"])
+
+    # --- BUCLE 2: Espera una nueva entrada del usuario ---
+    if prompt := st.chat_input("Escribe tu pregunta aquí..."):
+        # Añade el mensaje del usuario al historial y lo muestra en la pantalla.
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Genera y muestra la respuesta del asistente.
+        with st.chat_message("assistant"):
+            with st.spinner("Analizando texto e imágenes..."):
+                # Llama a la función que devuelve texto y una LISTA de imágenes.
+                response_text, response_images = generate_response(prompt, df_knowledge)
+                
+                # --- DEBUGGING: Comprueba si se recibieron imágenes ---
+                if response_images:
+                    st.write(f"DEBUG: Se recibieron {len(response_images)} imágenes para mostrar.")
+                    # Muestra las imágenes recibidas inmediatamente.
+                    for i, img in enumerate(response_images):
+                        st.image(img, caption=f"Referencia {i+1}", use_column_width=True)
+                else:
+                    st.write("DEBUG: No se recibieron imágenes en la respuesta.")
+                
+                # Muestra el texto de la respuesta.
+                st.markdown(response_text)
+                
+                # Prepara el mensaje completo (con texto e imágenes) para guardarlo en el historial.
+                assistant_message = {
+                    "role": "assistant",
+                    "content": response_text,
+                    "images": response_images  # Guarda la lista de imágenes (puede estar vacía).
+                }
+                st.session_state.messages.append(assistant_message)
 else:
-    st.error("La aplicación no puede continuar porque el DataFrame no se cargó.")
+    # Este mensaje aparece si get_knowledge_base() devolvió None.
+    st.error("No se pudo iniciar el chatbot porque la base de conocimiento no se cargó.")
