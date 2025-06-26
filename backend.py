@@ -155,6 +155,58 @@ def generate_response(query, dataframe):
             top_index = np.argmax(dot_products)
             match_row = dataframe.iloc[top_index]
 
+    # --- PROCESAMIENTO DE IMÁGENES ---
+    context_text = match_row['Contenido']
+    image_url = match_row['URL_Imagen']
+    images_to_display = []
+    
+    if image_url:
+        try:
+            # Descargamos la imagen desde la URL corregida
+            response = requests.get(image_url)
+            response.raise_for_status() # Lanza un error si la descarga falla
+            img = Image.open(io.BytesIO(response.content))
+            images_to_display.append(img)
+        except Exception as e:
+            # Si falla la descarga, añadimos un aviso al texto de la respuesta
+            context_text += f"\n\n(Aviso: No se pudo cargar la imagen asociada. Error: {e})"
+            
+    # --- GENERACIÓN DE LA RESPUESTA DE LA IA ---
+    # En este modelo simple, solo mostramos el contenido y la imagen
+    # No estamos usando la IA para generar texto, solo para mostrar los datos.
+    # Esto nos ayuda a confirmar que la lectura de datos funciona.
+    
+    # El "response_text" es simplemente el contenido de la base de datos
+    response_text = f"**{match_row['Libro']}**\n\n{context_text}"
+    
+    return response_text, images_to_display
+
+    # --- PROCESAMIENTO DE IMÁGENES ---
+    context_text = match_row['Contenido']
+    image_url = match_row['URL_Imagen']
+    images_to_display = []
+    
+    if image_url:
+        try:
+            # Descargamos la imagen desde la URL corregida
+            response = requests.get(image_url)
+            response.raise_for_status() # Lanza un error si la descarga falla
+            img = Image.open(io.BytesIO(response.content))
+            images_to_display.append(img)
+        except Exception as e:
+            # Si falla la descarga, añadimos un aviso al texto de la respuesta
+            context_text += f"\n\n(Aviso: No se pudo cargar la imagen asociada. Error: {e})"
+            
+    # --- GENERACIÓN DE LA RESPUESTA DE LA IA ---
+    # En este modelo simple, solo mostramos el contenido y la imagen
+    # No estamos usando la IA para generar texto, solo para mostrar los datos.
+    # Esto nos ayuda a confirmar que la lectura de datos funciona.
+    
+    # El "response_text" es simplemente el contenido de la base de datos
+    response_text = f"**{match_row['Libro']}**\n\n{context_text}"
+    
+    return response_text, images_to_display
+
     # Si no se encontró ningún contenido relevante, devuelve un mensaje
     if match_row is None:
         if extracted_id:
