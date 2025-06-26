@@ -83,87 +83,86 @@ def get_knowledge_base():
 # LÓGICA DEL CHATBOT (CEREBRO CON PERSONA DE PROFESOR)
 # -------------------
 
-def extract_exercise_id(query):
-    """Extrae un ID de ejercicio de la pregunta del usuario."""
-    books = ["beer", "hibbeler", "singer", "gere", "chopra", "irving"]
-    pattern = re.compile(
-        r'\b(' + '|'.join(books) + r')[\s\w\.]*(\d+[\.\-]\d+)\b', re.IGNORECASE)
-    match = pattern.search(query)
-    if match:
-        book_name = match.group(1).upper()
-        exercise_num = match.group(2).replace('-', '.')
-        return f"{book_name} {exercise_num}"
-    return None
-
 def generate_response(query, dataframe):
     """
-    Genera una respuesta interactiva y didáctica, usando la base de datos como
-    única fuente de conocimiento, pero con la libertad de explicar y razonar.
+    Genera una respuesta usando un modelo de IA con dos personalidades:
+    1.  ESTRICTO para ejercicios: Solo usa la base de datos.
+    2.  FLEXIBLE para teoría: Puede usar su conocimiento general.
     """
     model_generation = genai.GenerativeModel('gemini-1.5-flash-latest')
     
-    # La búsqueda de contexto sigue un proceso similar, pero el prompt cambia todo.
-    # Primero, buscamos el contexto más relevante.
-    
-    # Paso 1: Intentar encontrar un ID de ejercicio.
+    # --- PASO 1: Determinar si la pregunta es sobre un ejercicio específico ---
     exercise_id = extract_exercise_id(query)
+    
+    # --- CAMINO A: PREGUNTA SOBRE UN EJERCICIO (PERSONALIDAD ESTRICTA) ---
     if exercise_id:
         match = dataframe[dataframe['ID_Ejercicio'].str.strip().str.upper() == exercise_id.upper()]
-        if match.empty:
-            # Si se menciona un ID pero no se encuentra, paramos aquí.
-            return f"Lo siento, he buscado en mis apuntes pero no tengo información sobre el ejercicio '{exercise_id}'. ¿Puedo ayudarte con otro tema?"
-        else:
-            # Si se encuentra, usamos ese contexto específico.
+        
+        if not match.empty:
+            # Si el ejercicio ESTÁ en la base de datos
             context = match.iloc[0]['Contenido']
             libro = match.iloc[0]['Libro']
-            tema = match.iloc[0]['Tema']
-            context_source = f"el ejercicio {exercise_id} del libro {libro} sobre {tema}"
+            
+            prompt_ejercicio = f"""
+            Eres un profesor asistente. Tu única tarea es explicar la solución al ejercicio "{exercise_id}" del libro "{libro}".
+            
+            **Reglas Estrictas:**
+            1.  Basa tu explicación ÚNICA Y EXCLUSIVAMENTE en el siguiente "Contexto de la Solución".
+            2.  No puedes añadir información, datos o métodos que no estén en el contexto.
+            3.  Explica los pasos de forma clara, didáctica y usando formato Markdown y LaTeX para las ecuaciones.
+            
+            **Contexto de la Solución (Tu única fuente de verdad):**
+            ---
+            {context}
+            ---
+
+            **Tu explicación como profesor asistente:**
+            """
+            response = model_generation.generate_content(prompt_ejercicio)
+            return response.text
+        else:
+            # Si el ejercicio NO ESTÁ en la base de datos
+            return f"Lo siento, he buscado en mis apuntes pero no tengo registrada la solución para el ejercicio '{exercise_id}'. Para los ejercicios, solo puedo proporcionar la información que tengo en mi base de datos."
+
+    # --- CAMINO B: PREGUNTA TEÓRICA O GENERAL (PERSONALIDAD FLEXIBLE) ---
     else:
-        # Paso 2: Si no hay ID, hacer una búsqueda semántica para encontrar los fragmentos más relevantes.
+        # Para preguntas generales, intentamos enriquecer la respuesta con la base de datos,
+        # pero permitimos que el modelo use su conocimiento general.
+        
         query_embedding = genai.embed_content(model='models/embedding-001', content=query, task_type="RETRIEVAL_QUERY")["embedding"]
         
         dataframe['Embedding'] = dataframe['Embedding'].apply(np.array)
         knowledge_embeddings = np.stack(dataframe['Embedding'].values)
         dot_products = np.dot(knowledge_embeddings, query_embedding)
         
-        # Obtenemos los 2 fragmentos más relevantes para dar más riqueza al contexto.
-        top_indices = np.argsort(dot_products)[-2:][::-1]
+        # Encontramos el contexto más relevante, si existe.
+        context = ""
+        similarity_threshold = 0.7 
+        if np.max(dot_products) >= similarity_threshold:
+            top_index = np.argmax(dot_products)
+            context = dataframe.iloc[top_index]['Contenido']
+
+        prompt_teoria = f"""
+        Eres un profesor de Ingeniería Civil amable, experto y apasionado.
+        Un estudiante te ha hecho una pregunta. Debes responderla de la mejor manera posible.
+
+        **Tus Guías de Conversación:**
+        1.  **Usa tu conocimiento general:** Eres libre de usar todo tu conocimiento como modelo de IA para responder a la pregunta de forma completa y detallada.
+        2.  **Si hay contexto, úsalo:** Abajo te proporciono "Información Relevante de mis Apuntes". Si este texto es útil para responder la pregunta, intégralo en tu explicación, quizás diciendo "Esto me recuerda a un apunte que tengo..." o "Para complementar, mis notas dicen que...". Si no es relevante, puedes ignorarlo.
+        3.  **Formato Impecable:** Usa Markdown para que tu respuesta sea clara (títulos, negritas, listas). Formatea todas las ecuaciones y variables matemáticas con LaTeX ($...$ o $$...$$).
         
-        # Umbral de similitud para asegurar relevancia.
-        similarity_threshold = 0.7
-        if np.max(dot_products) < similarity_threshold:
-            return "Lo siento, no he encontrado información suficientemente relevante sobre ese tema en mi base de conocimiento actual para darte una respuesta confiable."
+        **Información Relevante de mis Apuntes (Opcional):**
+        ---
+        {context}
+        ---
 
-        # Unimos los fragmentos de contexto encontrados.
-        relevant_passages = dataframe.iloc[top_indices]['Contenido'].tolist()
-        context = "\n\n---\n\n".join(relevant_passages)
-        context_source = "mis apuntes de la base de conocimiento"
+        **Pregunta del Estudiante:**
+        {query}
 
-    # --- EL NUEVO PROMPT INTELIGENTE ---
-    # Este prompt le da al modelo el poder de ser un verdadero profesor.
-    prompt = f"""
-    Eres un profesor de Ingeniería Civil amable, paciente y muy didáctico.
-    Tu misión es responder a la pregunta de un estudiante.
-
-    **Tus Reglas de Oro:**
-    1.  **Fuente de Verdad Única:** Debes basar tu respuesta ÚNICA Y EXCLUSIVAMENTE en la siguiente "Información de Contexto". No puedes usar conocimiento externo ni inventar datos. Tu conocimiento se limita a lo que está escrito abajo.
-    2.  **Sé un Profesor, no un Loro:** No te limites a copiar el texto. Debes explicarlo, simplificarlo, compararlo o usarlo para responder directamente a la pregunta específica del usuario. Adáptate al tono y la intención de la pregunta.
-    3.  **Formato Profesional:** Usa Markdown para que tu respuesta sea clara y fácil de leer. Utiliza negritas, listas y, sobre todo, formatea las ecuaciones con LaTeX ($...$ para inline, $$...$$ para bloque).
-    4.  **Si no puedes, dilo:** Si la pregunta del estudiante requiere información que no está en el contexto (por ejemplo, comparar con un tema ausente o realizar un cálculo para el cual no tienes los datos), debes indicarlo amablemente diciendo algo como: "Esa es una excelente pregunta, pero mi conocimiento actual sobre este tema se basa solo en {context_source} y no incluye esa información específica."
-
-    ---
-    **Información de Contexto (Tu única fuente de verdad):**
-    {context}
-    ---
-
-    **Pregunta del Estudiante:**
-    {query}
-
-    **Tu Respuesta como Profesor:**
-    """
-    
-    response = model_generation.generate_content(prompt)
-    return response.text
+        **Tu Respuesta como Profesor Experto:**
+        """
+        response = model_generation.generate_content(prompt_teoria)
+        return response.text
 
 # -------------------
 # INTERFAZ DE USUARIO PRINCIPAL
