@@ -46,9 +46,15 @@ def get_knowledge_base():
     branch_name = "main" # O 'master', dependiendo de tu repositorio
     file_path = "Conocimiento_Ing_Civil.csv"
 
+     # La URL para acceder al archivo en formato "raw" (crudo)
+    csv_url = f"https://raw.githubusercontent.com/{github_user}/{github_repo}/{branch_name}/{file_path}"
+    
+    st.info(f"Cargando base de conocimiento desde: {csv_url}")
+
+
     try:
         # Lee el archivo CSV directamente desde la URL
-        df = pd.read_csv(csv_url, encoding='latin-1')
+        df = pd.read_csv(csv_url)
         
         # Limpieza de datos: reemplaza valores nulos (NaN) por strings vacíos
         df.fillna('', inplace=True)
