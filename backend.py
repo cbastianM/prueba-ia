@@ -83,6 +83,27 @@ def get_knowledge_base():
 # LÓGICA DEL CHATBOT (CEREBRO CON PERSONA DE PROFESOR)
 # -------------------
 
+# --- FUNCIÓN AUXILIAR (ASEGÚRATE DE QUE ESTÉ AQUÍ) ---
+def extract_exercise_id(query):
+    """Extrae un ID de ejercicio de la pregunta del usuario."""
+    # Puedes añadir más nombres de libros a esta lista
+    books = ["beer", "hibbeler", "singer", "gere", "chopra", "irving"]
+    
+    # Patrón de expresión regular para encontrar "libro numero.numero"
+    pattern = re.compile(
+        r'\b(' + '|'.join(books) + r')'  # Busca una de las palabras de la lista de libros
+        r'[\s\w\.]*'                      # Permite texto intermedio
+        r'(\d+[\.\-]\d+)\b',              # Captura el número del ejercicio como "2.73" o "4-5"
+        re.IGNORECASE                     # Ignora mayúsculas/minúsculas
+    )
+    
+    match = pattern.search(query)
+    if match:
+        book_name = match.group(1).upper()
+        exercise_num = match.group(2).replace('-', '.')
+        return f"{book_name} {exercise_num}"
+    return None
+
 def generate_response(query, dataframe):
     """
     Genera una respuesta con un modelo de IA con dos personalidades:
