@@ -1,4 +1,4 @@
 ID_Ejercicio,Libro,Contenido,"URL_Imagen"
-EJERCICIO 1.1,BEER 2.43,"Solución: Tensión AC = 352 lb y Tensión BC = 261 lb", "https://raw.githubusercontent.com/cbastianM/prueba-ia/main/assets/ejercicio%201.1.png"
-EJERCICIO 1.2,BEER 2.45 ,"Solución: Tensión AC = 2.50 kN y Tensión BC = 2.72 kN", "https://raw.githubusercontent.com/cbastianM/prueba-ia/main/assets/ejercicio%201.2.png"
-EJERCICIO 1.3,BEER 2.46,"Solución: Tensión AC = 304 kN y Tensión BC = 514 kN", "https://raw.githubusercontent.com/cbastianM/prueba-ia/main/assets/ejercicio%201.3.png"
+EJERCICIO 1.1,BEER 2.43,"Solución: Tensión AC = 352 lb y Tensión BC = 261 lb",https://raw.githubusercontent.com/cbastianM/prueba-ia/main/assets/ejercicio%201.1.png
+EJERCICIO 1.2,BEER 2.45 ,"Solución: Tensión AC = 2.50 kN y Tensión BC = 2.72 kN",https://raw.githubusercontent.com/cbastianM/prueba-ia/main/assets/ejercicio%201.2.png
+EJERCICIO 1.3,BEER 2.46,"Solución: Tensión AC = 304 kN y Tensión BC = 514 kN",https://raw.githubusercontent.com/cbastianM/prueba-ia/main/assets/ejercicio%201.3.png
