@@ -58,7 +58,7 @@ def generate_response(query, dataframe):
     images_to_display = []
     
     # Prepara el prompt para la IA
-    model = genai.GenerativeModel('gemini-1.5-pro-latest')
+    model = genai.GenerativeModel('gemma-3-12b-it')
     prompt_parts = [f"**Pregunta del estudiante:** {query}\n\n**Información del ejercicio:** {context_text}\n\n**Tu explicación como profesor:**"]
 
     # Si hay una cadena base64, la preparamos para la IA y para mostrarla
