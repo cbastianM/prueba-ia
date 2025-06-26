@@ -173,35 +173,58 @@ def generate_response(query, dataframe):
         return response.text
 
 # -------------------
-# INTERFAZ DE USUARIO PRINCIPAL
+# INTERFAZ DE USUARIO PRINCIPAL (VERSIÓN ROBUSTA)
 # -------------------
 
-# Carga la base de conocimiento una sola vez
+# Paso 1: Intentar cargar la base de conocimiento.
+# Usamos un bloque try-except para manejar cualquier posible error durante la carga.
 try:
-    df_knowledge = get_knowledge_base()
+    # Esta línea llama a la función que tiene los datos y los procesa.
+    # El resultado se guarda en caché para no repetirlo.
+    df_knowledge = get_knowledge_base() 
+    
+    # Comprobación explícita para asegurarnos de que el DataFrame no está vacío o es inválido.
+    if df_knowledge is None or df_knowledge.empty:
+        st.error("❌ La base de conocimiento no se pudo cargar o está vacía. El chatbot no puede funcionar.")
+        # Detenemos la ejecución aquí si no hay datos.
+        st.stop() 
+
 except Exception as e:
-    st.error(f"Ocurrió un error al inicializar la base de conocimiento: {e}")
+    st.error(f"🚨 Ocurrió un error crítico al inicializar la base de conocimiento: {e}")
+    st.warning("Revisa la función 'get_knowledge_base' en el código fuente.")
+    # Detenemos la ejecución si hay un error.
     st.stop()
 
-# Inicializa el historial del chat
+
+# Si el código llega hasta aquí, significa que df_knowledge se cargó correctamente.
+# Ahora podemos dibujar la interfaz de chat con seguridad.
+
+st.success("✅ Base de conocimiento cargada. ¡El profesor está listo!")
+
+# Inicializa el historial del chat si no existe.
 if 'messages' not in st.session_state:
     st.session_state.messages = [{"role": "assistant", "content": "¡Hola! Soy tu profesor virtual. ¿En qué tema o ejercicio necesitas ayuda hoy?"}]
 
-# Muestra los mensajes del historial
+# Muestra todos los mensajes del historial en cada recarga de la página.
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Acepta la entrada del usuario
+# --- LA BARRA DE CHAT ---
+# Esta línea dibuja la barra de entrada de texto en la parte inferior.
+# El `if` se ejecuta solo cuando el usuario escribe algo y presiona Enter.
 if prompt := st.chat_input("Escribe tu pregunta aquí..."):
+    # 1. Añade el mensaje del usuario al historial y lo muestra en la pantalla.
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
 
-    # Genera y muestra la respuesta
+    # 2. Genera y muestra la respuesta del asistente.
     with st.chat_message("assistant"):
-        with st.spinner("Consultando mis apuntes..."):
+        # Muestra un indicador de "pensando" mientras se genera la respuesta.
+        with st.spinner("Consultando mis apuntes y formulando una respuesta..."):
             response = generate_response(prompt, df_knowledge)
             st.markdown(response)
     
+    # 3. Añade la respuesta del asistente al historial para que persista.
     st.session_state.messages.append({"role": "assistant", "content": response})
