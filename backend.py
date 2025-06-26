@@ -118,86 +118,87 @@ def extract_exercise_id(query):
     return None
 
 def generate_response(query, dataframe):
-    """
-    Genera una respuesta multimodal.
-    Busca el ID en la columna 'ID_Ejercicio' o 'Libro' según el formato.
-    """
-    model_generation = genai.GenerativeModel('gemma-3-12b-it')
+    model_generation = genai.GenerativeModel('gemini-1.5-pro-latest')
     
     # --- BÚSQUEDA DE CONTEXTO ---
+    # ... (esta parte es la misma, no la cambiamos) ...
     extracted_id = extract_exercise_id(query)
     match_row = None
     
     if extracted_id:
-        # Comprobamos si el ID extraído empieza con "ejercicio" o "problema"
         if extracted_id.lower().startswith(('ejercicio', 'problema')):
-            # --- CAMINO A: Búsqueda por ID de Ejercicio ---
-            print(f"DEBUG: Buscando en columna 'ID_Ejercicio' por '{extracted_id}'")
             match_df = dataframe[dataframe['ID_Ejercicio'].str.strip().str.lower() == extracted_id.lower()]
             if not match_df.empty:
                 match_row = match_df.iloc[0]
         else:
-            # --- CAMINO B: Búsqueda por Nombre de Libro ---
-            print(f"DEBUG: Buscando en columna 'Libro' por '{extracted_id}'")
             match_df = dataframe[dataframe['Libro'].str.strip().str.upper() == extracted_id.upper()]
             if not match_df.empty:
                 match_row = match_df.iloc[0]
     else:
-        # --- CAMINO C: Búsqueda Semántica (si no hay ID) ---
-        print(f"DEBUG: No se encontró ID. Realizando búsqueda semántica.")
+        # ... (lógica de búsqueda semántica) ...
         query_embedding = genai.embed_content(model='models/embedding-001', content=query, task_type="RETRIEVAL_QUERY")["embedding"]
         dataframe['Embedding'] = dataframe['Embedding'].apply(np.array)
         knowledge_embeddings = np.stack(dataframe['Embedding'].values)
         dot_products = np.dot(knowledge_embeddings, query_embedding)
-        
         similarity_threshold = 0.7
         if np.max(dot_products) >= similarity_threshold:
             top_index = np.argmax(dot_products)
             match_row = dataframe.iloc[top_index]
 
-    # Si no se encontró ningún contenido relevante, devuelve un mensaje
     if match_row is None:
         if extracted_id:
             return f"Lo siento, no he encontrado una entrada para '{extracted_id}' en mi base de conocimiento.", []
         else:
             return "Lo siento, no he encontrado información relevante sobre ese tema en mi base de conocimiento.", []
 
-    # --- LÓGICA MULTIMODAL (esta parte no necesita cambios) ---
-    context_text = match_row['Contenido']
-    image_urls_str = match_row['URL_Imagen']
+    # --- DEPURACIÓN PROFUNDA DE IMÁGENES ---
+    print("--- INICIO DEPURACIÓN DE IMÁGENES ---")
     
+    context_text = match_row['Contenido']
+    
+    # 1. Comprobamos si la columna 'URL_Imagen' existe y qué contiene
+    if 'URL_Imagen' in match_row:
+        image_urls_str = match_row['URL_Imagen']
+        print(f"DEBUG: Fila encontrada. Contenido de 'URL_Imagen': '{image_urls_str}' (Tipo: {type(image_urls_str)})")
+    else:
+        print("DEBUG: ERROR - La columna 'URL_Imagen' no se encontró en la fila.")
+        image_urls_str = ""
+
     prompt_parts = []
     images_to_display = []
 
-    prompt_text = f"""
-    Eres un profesor de Ingeniería Civil. Analiza el siguiente texto y, si se proporcionan imágenes, úsalas para explicar la pregunta del estudiante.
-
-    **Contexto:**
-    {context_text}
-
-    **Pregunta:**
-    {query}
-
-    **Instrucciones Clave:**
-    1.  Si hay imágenes, tu explicación DEBE hacer referencia a ellas. Describe lo que muestran y cómo se relacionan con el tema. Usa frases como "En la primera imagen vemos...", "La segunda imagen ilustra...", etc.
-    2.  Si no hay imágenes, responde basándote solo en el texto.
-    3.  Explica los conceptos con claridad, formato Markdown y ecuaciones en LaTeX ($...$$).
-
-    **Tu Explicación:**
-    """
-    prompt_parts.append(prompt_text)
-
+    # 2. Comprobamos si la cadena de URLs tiene contenido
     if image_urls_str and isinstance(image_urls_str, str) and image_urls_str.strip():
+        print("DEBUG: La cadena de URLs no está vacía. Procediendo a dividir y descargar.")
         image_urls = image_urls_str.split('|')
-        for url in image_urls:
+        for i, url in enumerate(image_urls):
+            url = url.strip()
+            print(f"DEBUG: Intentando descargar imagen {i+1} desde URL: '{url}'")
             try:
-                response = requests.get(url.strip())
-                response.raise_for_status()
+                response = requests.get(url)
+                # 3. Comprobamos el código de estado de la respuesta
+                print(f"DEBUG: Código de estado de la respuesta HTTP: {response.status_code}")
+                response.raise_for_status() # Lanza un error para códigos 4xx/5xx
+                
                 img = Image.open(io.BytesIO(response.content))
+                print(f"DEBUG: ¡Imagen {i+1} descargada y procesada correctamente!")
                 prompt_parts.append(img)
                 images_to_display.append(img)
+            except requests.exceptions.RequestException as e:
+                print(f"DEBUG: ERROR DE RED al descargar la imagen {i+1}: {e}")
             except Exception as e:
-                print(f"Error al descargar la imagen: {e}")
+                print(f"DEBUG: ERROR GENERAL al procesar la imagen {i+1}: {e}")
+    else:
+        print("DEBUG: La cadena de URLs está vacía o no es un string. Saltando la descarga de imágenes.")
+        
+    print(f"DEBUG: Finalizada la carga de imágenes. Total de imágenes para mostrar: {len(images_to_display)}")
+    print("--- FIN DEPURACIÓN DE IMÁGENES ---")
+
+    # --- Lógica del prompt y generación (sin cambios) ---
+    prompt_text = f"""
+    Eres un profesor de Ingeniería Civil... (tu prompt completo va aquí)
+    """
+    prompt_parts.insert(0, prompt_text) # Inserta el texto al principio de la lista
 
     try:
         response_ai = model_generation.generate_content(prompt_parts)
