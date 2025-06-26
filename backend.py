@@ -77,7 +77,7 @@ def generate_response(query, dataframe):
             context_text += f"\n\n**(Aviso del sistema: No se pudo cargar la imagen asociada. Error: {e})**"
             
     # --- GENERACIÓN DE LA RESPUESTA DE LA IA ---
-    model = genai.GenerativeModel('gemini-2.5-pro')
+    model = genai.GenerativeModel('gemini-2.5-flash')
     prompt_parts = [
         f"""
         **ROL:** Eres un profesor de Ingeniería Civil.
