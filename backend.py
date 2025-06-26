@@ -46,6 +46,7 @@ def get_knowledge_base():
     branch_name = "main" # O 'master', dependiendo de tu repositorio
     file_path = "Conocimiento_Ing_Civil.csv"
 
+    csv_url = f"https://raw.githubusercontent.com/cbastianM/prueba-ia/refs/heads/main/Conocimiento_Ing_Civil.csv"
 
     try:
         # Lee el archivo CSV directamente desde la URL
