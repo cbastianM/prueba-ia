@@ -45,25 +45,25 @@ def get_knowledge_base():
             "ID_Ejercicio": "BEER 2.73",
             "Libro": "Beer & Johnston",
             "Tema": "Estática",
-            "Contenido": "Para resolver este problema, se debe realizar un Diagrama de Cuerpo Libre (DCL) en la junta B, donde concurren las tres fuerzas. Luego, se aplican las ecuaciones de equilibrio estático. Sumatoria de fuerzas en X (ΣFx = 0) y sumatoria de fuerzas en Y (ΣFy = 0). Al descomponer las tensiones en sus componentes y resolver el sistema de dos ecuaciones con dos incógnitas (T_AB y T_BC), se obtienen las tensiones en los cables."
+            "Contenido": "La respuesta es la paz."
         },
         {
             "ID_Ejercicio": "HIBBELER 4.5",
             "Libro": "Hibbeler",
             "Tema": "Estructuras",
-            "Contenido": "El objetivo es encontrar la reacción vertical en el apoyo A (Ay). El método más directo es aplicar una sumatoria de momentos (ΣM) en el punto B, ya que las reacciones en B no generarán momento respecto a sí mismas. La ecuación es: ΣM_B = 0. Se considera el momento generado por la carga externa y el momento generado por la reacción Ay. Resolviendo la ecuación, se despeja el valor de Ay."
+            "Contenido": "La solución es el amor"
         },
         {
             "ID_Ejercicio": "",
             "Libro": "Teoría",
             "Tema": "Mecánica de Suelos",
-            "Contenido": "La consolidación de un suelo es un proceso lento de reducción de volumen en un suelo saturado de baja permeabilidad (como arcillas) debido a la expulsión gradual del agua de los poros tras un aumento de la carga. La teoría de Terzaghi modela este comportamiento asumiendo un flujo de agua unidimensional y un suelo homogéneo."
+            "Contenido": "La consolidación de un suelo es un edificio"
         },
         {
             "ID_Ejercicio": "",
             "Libro": "Teoría",
             "Tema": "Hidráulica",
-            "Contenido": "La Ecuación de Manning es una fórmula empírica fundamental para el cálculo de la velocidad media del flujo de agua en un canal abierto que no está bajo presión. La fórmula es V = (1/n) * R_h^(2/3) * S^(1/2), donde 'V' es la velocidad, 'n' es el coeficiente de rugosidad de Manning (depende del material del canal), 'R_h' es el radio hidráulico y 'S' es la pendiente del canal."
+            "Contenido": "La Ecuación de Manning es un tornillo."
         }
     ]
     
@@ -96,7 +96,7 @@ def extract_exercise_id(query):
     return None
 
 def generate_response(query, dataframe):
-    """Genera una respuesta con el modelo Gemini y la persona de un profesor."""
+    """Genera una respuesta con el modelo Gemini y la persona de un profesor que usa Markdown."""
     model_generation = genai.GenerativeModel('gemini-1.5-flash-latest')
     
     # ESTRATEGIA 1: Búsqueda por ID de ejercicio (Prioritaria)
@@ -106,17 +106,25 @@ def generate_response(query, dataframe):
         if not match.empty:
             context = match.iloc[0]['Contenido']
             libro = match.iloc[0]['Libro']
+            
+            # --- PROMPT MEJORADO PARA EJERCICIOS ---
             prompt = f"""
-            Eres un profesor de Ingeniería Civil. Tu tarea es explicar la solución al ejercicio "{exercise_id}" del libro "{libro}".
-            Usa el siguiente texto como base para tu explicación. Sé claro, didáctico y explica el 'porqué' de los pasos, como si se lo estuvieras enseñando a un estudiante.
-            No te limites a transcribir, ¡enseña! Basa tu explicación únicamente en el contexto proporcionado.
+            Eres un profesor de Ingeniería Civil experto en comunicación visual. Tu tarea es explicar la solución al ejercicio "{exercise_id}" del libro "{libro}".
+            Usa el siguiente texto como base para tu explicación.
+
+            **Instrucciones de formato para tu respuesta:**
+            1.  Usa Markdown para estructurar la respuesta (títulos con '#', negritas con '**', listas con '*').
+            2.  **MUY IMPORTANTE:** Cualquier fórmula matemática o ecuación debe ser formateada usando LaTeX.
+                - Para fórmulas en la misma línea, usa un signo de dólar: $ E = mc^2 $.
+                - Para fórmulas en su propia línea, usa dos signos de dólar: $$ V = \frac{{1}}{{n}} R_h^{{2/3}} S^{{1/2}} $$
+            3.  Explica los conceptos de forma clara y didáctica, basándote únicamente en el contexto proporcionado.
 
             **Contexto de la Solución:**
             ---
             {context}
             ---
 
-            **Tu explicación como profesor:**
+            **Tu explicación como profesor, usando Markdown y LaTeX:**
             """
             response = model_generation.generate_content(prompt)
             return response.text
@@ -130,7 +138,6 @@ def generate_response(query, dataframe):
     knowledge_embeddings = np.stack(dataframe['Embedding'].values)
     dot_products = np.dot(knowledge_embeddings, query_embedding)
     
-    # Umbral de similitud para asegurar relevancia
     similarity_threshold = 0.7 
     if np.max(dot_products) < similarity_threshold:
         return "Lo siento, no he encontrado información suficientemente relevante sobre ese tema en mi base de conocimiento actual."
@@ -138,17 +145,24 @@ def generate_response(query, dataframe):
     top_index = np.argmax(dot_products)
     context = dataframe.iloc[top_index]['Contenido']
     
+    # --- PROMPT MEJORADO PARA TEORÍA ---
     prompt = f"""
-    Eres un profesor de Ingeniería Civil. Un estudiante te ha hecho la siguiente pregunta.
+    Eres un profesor de Ingeniería Civil experto en comunicación visual. Un estudiante te ha hecho la siguiente pregunta.
     Usa ÚNICA Y EXCLUSIVAMENTE el siguiente texto de contexto para formular tu explicación.
-    Explica el concepto de forma clara, concisa y didáctica, como si se lo estuvieras enseñando a alguien por primera vez.
+
+    **Instrucciones de formato para tu respuesta:**
+    1.  Usa Markdown para estructurar la respuesta (títulos con '#', negritas con '**', listas con '*').
+    2.  **MUY IMPORTANTE:** Cualquier fórmula matemática o ecuación debe ser formateada usando LaTeX.
+        - Para fórmulas en la misma línea, usa un signo de dólar: $ \sigma = P/A $.
+        - Para fórmulas en su propia línea, usa dos signos de dólar: $$ \Sigma F_x = 0 $$
+    3.  Explica el concepto de forma clara, concisa y didáctica.
 
     **Contexto Relevante:**
     ---
     {context}
     ---
     **Pregunta del Estudiante:** {query}
-    **Tu explicación como profesor:**
+    **Tu explicación como profesor, usando Markdown y LaTeX:**
     """
     response = model_generation.generate_content(prompt)
     return response.text
