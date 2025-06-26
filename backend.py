@@ -204,42 +204,66 @@ def generate_response(query, dataframe):
         return response_ai.text, images_to_display
     except Exception as e:
         return f"Ocurrió un error al generar la respuesta: {e}", []
+
 # -------------------
-# INTERFAZ DE USUARIO PRINCIPAL (Modificada para mostrar múltiples imágenes)
+# INTERFAZ DE USUARIO PRINCIPAL (Versión Robusta para Imágenes)
 # -------------------
 df_knowledge = get_knowledge_base()
 
+# La aplicación solo continúa si la base de conocimiento se cargó correctamente.
 if df_knowledge is not None:
-    st.success("✅ Base de conocimiento cargada. ¡El profesor está listo!")
-    
-    if 'messages' not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": "¡Hola! ¿En qué puedo ayudarte hoy?"}]
+    # Este mensaje solo aparece si get_knowledge_base() fue exitoso.
+    # st.success("✅ Base de conocimiento lista. Iniciando chat...")
 
+    # Inicializa el historial del chat si no existe.
+    if 'messages' not in st.session_state:
+        st.session_state.messages = [{"role": "assistant", "content": "¡Hola! Soy tu profesor virtual. ¿En qué puedo ayudarte hoy?"}]
+
+    # --- BUCLE 1: Dibuja todo el historial de chat existente ---
     for message in st.session_state.messages:
         with st.chat_message(message["role"]):
-            if "images" in message:  # Busca la clave "images" (plural)
-                for i, img in enumerate(message["images"]): # Itera sobre la lista de imágenes
-                    st.image(img, caption=f"Imagen {i+1}", use_column_width=True) # Añadido use_column_width
+            # Comprueba si hay una lista de imágenes en este mensaje del historial.
+            # Usamos .get() para evitar errores si la clave "images" no existe.
+            if message.get("images"):
+                # Si la clave "images" existe y tiene contenido, itera y muestra cada imagen.
+                for img in message["images"]:
+                    st.image(img, use_column_width=True)
+            
+            # Siempre muestra el contenido de texto.
             st.markdown(message["content"])
 
+    # --- BUCLE 2: Espera una nueva entrada del usuario ---
     if prompt := st.chat_input("Escribe tu pregunta aquí..."):
+        # Añade el mensaje del usuario al historial y lo muestra en la pantalla.
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
+        # Genera y muestra la respuesta del asistente.
         with st.chat_message("assistant"):
             with st.spinner("Analizando texto e imágenes..."):
-                response_text, response_images = generate_response(prompt, df_knowledge) # Recibe la lista de imágenes
+                # Llama a la función que devuelve texto y una LISTA de imágenes.
+                response_text, response_images = generate_response(prompt, df_knowledge)
                 
-                # Prepara el mensaje para el historial (con la lista de imágenes)
-                assistant_message = {"role": "assistant", "content": response_text, "images": response_images}
-                
-                # Muestra cada imagen con su caption
+                # --- DEBUGGING: Comprueba si se recibieron imágenes ---
                 if response_images:
+                    st.write(f"DEBUG: Se recibieron {len(response_images)} imágenes para mostrar.")
+                    # Muestra las imágenes recibidas inmediatamente.
                     for i, img in enumerate(response_images):
-                        st.image(img, caption=f"Imagen {i+1} de referencia", use_column_width=True) # Añadido use_column_width
+                        st.image(img, caption=f"Referencia {i+1}", use_column_width=True)
+                else:
+                    st.write("DEBUG: No se recibieron imágenes en la respuesta.")
                 
+                # Muestra el texto de la respuesta.
                 st.markdown(response_text)
+                
+                # Prepara el mensaje completo (con texto e imágenes) para guardarlo en el historial.
+                assistant_message = {
+                    "role": "assistant",
+                    "content": response_text,
+                    "images": response_images  # Guarda la lista de imágenes (puede estar vacía).
+                }
                 st.session_state.messages.append(assistant_message)
 else:
-    st.error("La base de conocimiento no pudo ser cargada. Revisa la URL del CSV y los logs.")
+    # Este mensaje aparece si get_knowledge_base() devolvió None.
+    st.error("No se pudo iniciar el chatbot porque la base de conocimiento no se cargó.")
