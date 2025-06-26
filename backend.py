@@ -170,7 +170,7 @@ if uploaded_file is not None:
         st.session_state.uploaded_file_name = uploaded_file.name
         # Limpiar historial de chat si se sube un nuevo archivo
         st.session_state.messages = [{"role": "assistant", "content": "¡Base de conocimiento cargada! ¿En qué puedo ayudarte?"}]
-        st.experimental_rerun()
+        st.rerun()
     
     df_knowledge = st.session_state.df_knowledge
 
