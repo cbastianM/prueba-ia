@@ -164,7 +164,7 @@ def generate_response(query, dataframe):
 
     # --- LÓGICA MULTIMODAL (esta parte no necesita cambios) ---
     context_text = match_row['Contenido']
-    image_urls_str = match_row['URL_Imagen']
+    image_urls_str = match_row["URL_Imagen"]
     
     prompt_parts = []
     images_to_display = []
