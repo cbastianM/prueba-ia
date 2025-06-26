@@ -8,7 +8,7 @@ st.title("🕵️‍♂️ Diagnóstico Final de Lectura de Datos")
 @st.cache_data(ttl=60) # Cache muy corto para asegurar que siempre recargue los cambios
 def load_data():
     """Lee el CSV desde una URL fija y lo devuelve."""
-    csv_url = "https://raw.githubusercontent.com/cbastianM/prueba-ia/main/base_conocimiento.csv"
+    csv_url = "https://raw.githubusercontent.com/cbastianM/prueba-ia/refs/heads/main/Conocimiento_Ing_Civil.csv"
     try:
         df = pd.read_csv(csv_url)
         # Reemplaza valores nulos (NaN) por strings vacíos
