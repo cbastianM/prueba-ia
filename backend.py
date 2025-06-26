@@ -1,114 +1,76 @@
-# -------------------
-# LIBRERÍAS (ya no necesitamos requests ni io para la imagen)
-# -------------------
 import streamlit as st
-import google.generativeai as genai
 import pandas as pd
-import numpy as np
-import re
-from PIL import Image
-import base64 # Librería estándar para decodificar
 
-# -------------------
-# CONFIGURACIÓN DE LA PÁGINA Y API
-# -------------------
-st.set_page_config(page_title="Profesor de Ing. Civil", page_icon="🎓")
-st.title("🎓 Profesor Virtual de Ingeniería Civil")
+st.set_page_config(page_title="Diagnóstico Final", layout="wide")
+st.title("🕵️‍♂️ Diagnóstico Final de Lectura de Datos")
 
-try:
-    GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
-    genai.configure(api_key=GEMINI_API_KEY)
-except KeyError:
-    st.error("⚠️ No se encontró la GEMINI_API_KEY. Configúrala en los secrets de Streamlit.")
-    st.stop()
-
-# -------------------
-# CARGA DE DATOS DESDE CSV EN GITHUB
-# -------------------
-@st.cache_data(ttl=3600)
-def load_knowledge_base():
-    """Lee el CSV desde una URL fija de GitHub."""
-    csv_url = "https://raw.githubusercontent.com/cbastianM/prueba-ia/refs/heads/main/Conocimiento_Ing_Civil.csv"
+# --- FUNCIÓN DE CARGA DE DATOS ---
+@st.cache_data(ttl=60) # Cache muy corto para asegurar que siempre recargue los cambios
+def load_data():
+    """Lee el CSV desde una URL fija y lo devuelve."""
+    csv_url = "https://raw.githubusercontent.com/cbastianM/prueba-ia/main/base_conocimiento.csv"
     try:
         df = pd.read_csv(csv_url)
+        # Reemplaza valores nulos (NaN) por strings vacíos
         df.fillna('', inplace=True)
         return df
     except Exception as e:
-        st.error(f"❌ Error al leer el archivo CSV desde GitHub: {e}")
+        st.error(f"❌ ERROR AL LEER EL CSV DESDE GITHUB: {e}")
         return None
 
-# -------------------
-# LÓGICA DEL CHATBOT CON BASE64
-# -------------------
-def generate_response(query, dataframe):
-    """Genera una respuesta, buscando el ejercicio y usando la imagen Base64 si existe."""
-    query_lower = query.lower().strip()
-    match_row = None
+# --- EJECUCIÓN PRINCIPAL ---
+df = load_data()
+
+if df is not None:
+    st.success("✅ Archivo CSV cargado en un DataFrame de Pandas.")
     
-    match_df = dataframe.loc[dataframe['ID_Ejercicio'].str.lower() == query_lower]
+    st.header("1. Contenido del DataFrame Cargado")
+    st.markdown("Verifica que las columnas y los datos se vean correctos aquí.")
+    st.dataframe(df)
     
-    if not match_df.empty:
-        match_row = match_df.iloc[0]
-
-    if match_row is None:
-        return "Lo siento, no pude encontrar ese ejercicio. Por favor, escribe el ID exacto (ej: 'ejercicio 1.1').", []
-
-    context_text = match_row['Contenido']
-    base64_string = match_row['URL_Imagen'] # Ahora es una cadena base64
-    images_to_display = []
+    st.header("2. Prueba de Búsqueda Manual")
+    st.markdown("Escribe un ID de la tabla de arriba (ej: `ejercicio 1.1`) y presiona 'Buscar'.")
     
-    # Prepara el prompt para la IA
-    model = genai.GenerativeModel('gemma-3-12b-it')
-    prompt_parts = [f"**Pregunta del estudiante:** {query}\n\n**Información del ejercicio:** {context_text}\n\n**Tu explicación como profesor:**"]
-
-    # Si hay una cadena base64, la preparamos para la IA y para mostrarla
-    if base64_string and base64_string.startswith('data:image'):
-        # Creamos el objeto de imagen para la IA
-        image_part = {
-            "mime_type": "image/png", # Asumimos PNG, puedes cambiarlo
-            "data": base64_string.split(",")[1] # Quitamos el prefijo "data:image/png;base64,"
-        }
-        prompt_parts.append(image_part)
-        # La cadena base64 se puede pasar directamente a st.image
-        images_to_display.append(base64_string)
-
-    try:
-        response = model.generate_content(prompt_parts)
-        return response.text, images_to_display
-    except Exception as e:
-        return f"Error al contactar a la IA: {e}", images_to_display
-
-
-# -------------------
-# INTERFAZ DE USUARIO
-# -------------------
-df_knowledge = load_knowledge_base()
-
-if df_knowledge is not None:
-    st.success("Base de conocimiento cargada.")
-    if 'messages' not in st.session_state:
-        st.session_state.messages = [{"role": "assistant", "content": "¿Qué ejercicio quieres revisar?"}]
-
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            if message.get("images"):
-                for img_data in message["images"]:
-                    st.image(img_data, use_column_width=True) # st.image puede manejar cadenas base64
-            st.markdown(message["content"])
-
-    if prompt := st.chat_input("Escribe el ID del ejercicio (ej: ejercicio 1.1)"):
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        with st.chat_message("assistant"):
-            response_text, response_images = generate_response(prompt, df_knowledge)
+    # Input para que el usuario escriba el ID
+    search_id = st.text_input("ID del Ejercicio a buscar:")
+    
+    if st.button("Buscar"):
+        if search_id:
+            # LIMPIEZA: Quitamos espacios y convertimos a minúsculas en ambos lados
+            query_cleaned = search_id.strip().lower()
+            df['ID_Ejercicio_cleaned'] = df['ID_Ejercicio'].str.strip().str.lower()
             
-            if response_images:
-                for img_data in response_images:
-                    st.image(img_data, use_column_width=True)
+            # Búsqueda
+            match_df = df[df['ID_Ejercicio_cleaned'] == query_cleaned]
             
-            st.markdown(response_text)
-            
-            assistant_message = {"role": "assistant", "content": response_text, "images": response_images}
-            st.session_state.messages.append(assistant_message)
+            st.divider()
+            if not match_df.empty:
+                st.success(f"✅ ¡MATCH ENCONTRADO PARA '{search_id}'!")
+                
+                # Selecciona la primera fila encontrada
+                match_row = match_df.iloc[0]
+                
+                st.subheader("Datos de la Fila Encontrada:")
+                st.write(match_row)
+                
+                st.subheader("Intento de mostrar la imagen:")
+                image_data = match_row['URL_Imagen']
+                
+                if image_data and isinstance(image_data, str) and image_data.strip():
+                    st.write("Se encontró contenido en la columna 'URL_Imagen'. Intentando mostrarla:")
+                    try:
+                        st.image(image_data, caption="Imagen cargada desde la Base de Datos")
+                        st.success("¡La imagen se mostró correctamente!")
+                    except Exception as e:
+                        st.error(f"FALLO al intentar mostrar la imagen. El dato es: '{image_data}'. Error: {e}")
+                else:
+                    st.warning("La columna 'URL_Imagen' para esta fila está vacía.")
+                    
+            else:
+                st.error(f"❌ NO SE ENCONTRÓ MATCH PARA '{search_id}'.")
+                st.warning("Posibles causas: El ID no existe en la tabla o fue escrito incorrectamente.")
+                st.write("IDs disponibles (en minúsculas):", df['ID_Ejercicio_cleaned'].tolist())
+        else:
+            st.warning("Por favor, escribe un ID para buscar.")
+else:
+    st.error("La aplicación no puede continuar porque el DataFrame no se cargó.")
