@@ -85,9 +85,9 @@ def get_knowledge_base():
 
 def generate_response(query, dataframe):
     """
-    Genera una respuesta usando un modelo de IA con dos personalidades:
-    1.  ESTRICTO para ejercicios: Solo usa la base de datos.
-    2.  FLEXIBLE para teoría: Puede usar su conocimiento general.
+    Genera una respuesta con un modelo de IA con dos personalidades:
+    1. ESTRICTO para ejercicios: Solo usa la base de datos.
+    2. FLEXIBLE para teoría: Usa su conocimiento general, enriquecido opcionalmente por la base de datos.
     """
     model_generation = genai.GenerativeModel('gemini-1.5-flash-latest')
     
@@ -96,70 +96,57 @@ def generate_response(query, dataframe):
     
     # --- CAMINO A: PREGUNTA SOBRE UN EJERCICIO (PERSONALIDAD ESTRICTA) ---
     if exercise_id:
+        print(f"DEBUG: ID de ejercicio detectado: '{exercise_id}'. Entrando en CAMINO ESTRICTO.") # Mensaje de depuración
+        
         match = dataframe[dataframe['ID_Ejercicio'].str.strip().str.upper() == exercise_id.upper()]
         
         if not match.empty:
-            # Si el ejercicio ESTÁ en la base de datos
+            print("DEBUG: Ejercicio encontrado en la base de datos.") # Mensaje de depuración
             context = match.iloc[0]['Contenido']
             libro = match.iloc[0]['Libro']
             
             prompt_ejercicio = f"""
-            Eres un profesor asistente. Tu única tarea es explicar la solución al ejercicio "{exercise_id}" del libro "{libro}".
-            
-            **Reglas Estrictas:**
-            1.  Basa tu explicación ÚNICA Y EXCLUSIVAMENTE en el siguiente "Contexto de la Solución".
-            2.  No puedes añadir información, datos o métodos que no estén en el contexto.
-            3.  Explica los pasos de forma clara, didáctica y usando formato Markdown y LaTeX para las ecuaciones.
-            
+            **ROL Y OBJETIVO:** Eres un profesor asistente cuya única tarea es explicar la solución del ejercicio "{exercise_id}" del libro "{libro}".
+
+            **REGLAS CRÍTICAS:**
+            1.  Tu conocimiento se limita ESTRICTA Y ÚNICAMENTE al siguiente "Contexto de la Solución".
+            2.  NO PUEDES usar conocimiento externo ni inventar información.
+            3.  Tu explicación debe ser didáctica. Formatea con Markdown y usa LaTeX para las ecuaciones (ej: $ ... $ o $$ ... $$).
+
             **Contexto de la Solución (Tu única fuente de verdad):**
             ---
             {context}
             ---
 
-            **Tu explicación como profesor asistente:**
+            **Explicación:**
             """
             response = model_generation.generate_content(prompt_ejercicio)
             return response.text
         else:
-            # Si el ejercicio NO ESTÁ en la base de datos
-            return f"Lo siento, he buscado en mis apuntes pero no tengo registrada la solución para el ejercicio '{exercise_id}'. Para los ejercicios, solo puedo proporcionar la información que tengo en mi base de datos."
+            print("DEBUG: Ejercicio NO encontrado en la base de datos.") # Mensaje de depuración
+            return f"He revisado mis apuntes y no tengo la solución para el ejercicio '{exercise_id}'. Para problemas específicos, solo puedo usar la información registrada en mi base de datos."
 
     # --- CAMINO B: PREGUNTA TEÓRICA O GENERAL (PERSONALIDAD FLEXIBLE) ---
     else:
-        # Para preguntas generales, intentamos enriquecer la respuesta con la base de datos,
-        # pero permitimos que el modelo use su conocimiento general.
+        print(f"DEBUG: No se detectó ID de ejercicio. Entrando en CAMINO FLEXIBLE para la pregunta: '{query}'") # Mensaje de depuración
         
-        query_embedding = genai.embed_content(model='models/embedding-001', content=query, task_type="RETRIEVAL_QUERY")["embedding"]
+        # En este camino, no necesitamos buscar en nuestra base de datos, ya que el modelo usará su conocimiento general.
+        # Simplemente le pasamos la pregunta directamente con un prompt que le da libertad.
         
-        dataframe['Embedding'] = dataframe['Embedding'].apply(np.array)
-        knowledge_embeddings = np.stack(dataframe['Embedding'].values)
-        dot_products = np.dot(knowledge_embeddings, query_embedding)
-        
-        # Encontramos el contexto más relevante, si existe.
-        context = ""
-        similarity_threshold = 0.7 
-        if np.max(dot_products) >= similarity_threshold:
-            top_index = np.argmax(dot_products)
-            context = dataframe.iloc[top_index]['Contenido']
-
         prompt_teoria = f"""
-        Eres un profesor de Ingeniería Civil amable, experto y apasionado.
-        Un estudiante te ha hecho una pregunta. Debes responderla de la mejor manera posible.
+        **ROL Y OBJETIVO:** Eres un profesor de Ingeniería Civil experto, amigable y apasionado. Tu objetivo es responder a la pregunta de un estudiante de la forma más completa y clara posible.
 
-        **Tus Guías de Conversación:**
-        1.  **Usa tu conocimiento general:** Eres libre de usar todo tu conocimiento como modelo de IA para responder a la pregunta de forma completa y detallada.
-        2.  **Si hay contexto, úsalo:** Abajo te proporciono "Información Relevante de mis Apuntes". Si este texto es útil para responder la pregunta, intégralo en tu explicación, quizás diciendo "Esto me recuerda a un apunte que tengo..." o "Para complementar, mis notas dicen que...". Si no es relevante, puedes ignorarlo.
-        3.  **Formato Impecable:** Usa Markdown para que tu respuesta sea clara (títulos, negritas, listas). Formatea todas las ecuaciones y variables matemáticas con LaTeX ($...$ o $$...$$).
-        
-        **Información Relevante de mis Apuntes (Opcional):**
-        ---
-        {context}
-        ---
+        **REGLAS CRÍTICAS:**
+        1.  **Usa tu conocimiento general:** Tienes total libertad para usar todo tu conocimiento como modelo de IA avanzado para responder a la pregunta.
+        2.  **Sé un gran profesor:** Explica los conceptos de forma intuitiva, da ejemplos si es necesario y estructura tu respuesta para que sea fácil de seguir.
+        3.  **Formato Impecable:** Utiliza Markdown (negritas, listas, etc.) y formatea cualquier ecuación, fórmula o variable matemática con LaTeX (ej: $ ... $ o $$ ... $$).
 
         **Pregunta del Estudiante:**
+        ---
         {query}
+        ---
 
-        **Tu Respuesta como Profesor Experto:**
+        **Tu respuesta como profesor experto:**
         """
         response = model_generation.generate_content(prompt_teoria)
         return response.text
