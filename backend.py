@@ -26,7 +26,7 @@ except KeyError:
 @st.cache_data(ttl=3600)
 def load_knowledge_base():
     """Lee el CSV desde una URL fija de GitHub."""
-    csv_url = "https://raw.githubusercontent.com/cbastianM/prueba-ia/main/base_conocimiento.csv"
+    csv_url = "https://raw.githubusercontent.com/cbastianM/prueba-ia/main/Conocimiento_Ing_Civil.csv"
     try:
         df = pd.read_csv(csv_url, skipinitialspace=True)
         df.fillna('', inplace=True)
