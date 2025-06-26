@@ -1,3 +1,4 @@
-ID_Ejercicio,Libro,Contenido,Tema
-BEER 2.73,Beer & Johnston,Solución para BEER 2.73: La solución es amor,Estática
-HIBBELER 4.5,Hibbeler,Solución HIBBELER 4.5: La respuesta es paz,Estructuras
+ID_Ejercicio,Libro,Contenido,URL_Imagen
+ejercicio 1.1,Beer 2.43,"Solución: Tensión AC = 352 lb , Tensión BC = 261 lb",imagen1
+ejercicio 1.2,Beer 2.45 ,"Solución: Tensión AC = 2.50 kN, Tensión BC = 2.72 kN",imagen2
+ejercicio 1.3,Beer 2.46,"Solución: Tensión AC = 304 kN, Tensión BC = 514 kN",imagen3
