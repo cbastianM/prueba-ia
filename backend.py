@@ -118,7 +118,7 @@ def extract_exercise_id(query):
     return None
 
 def generate_response(query, dataframe):
-    model_generation = genai.GenerativeModel('gemini-1.5-pro-latest')
+    model_generation = genai.GenerativeModel('gemma-3-4b-it')
     
     # --- BÚSQUEDA DE CONTEXTO ---
     # ... (esta parte es la misma, no la cambiamos) ...
