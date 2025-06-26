@@ -122,7 +122,7 @@ def generate_response(query, dataframe):
     Genera una respuesta multimodal.
     Busca el ID en la columna 'ID_Ejercicio' o 'Libro' según el formato.
     """
-    model_generation = genai.GenerativeModel('gemma-3-27b-it')
+    model_generation = genai.GenerativeModel('gemma-3-12b-it')
     
     # --- BÚSQUEDA DE CONTEXTO ---
     extracted_id = extract_exercise_id(query)
