@@ -31,53 +31,54 @@ except (FileNotFoundError, KeyError):
 # BASE DE CONOCIMIENTO (DATOS DENTRO DEL CÓDIGO)
 # -------------------
 
-# @st.cache_resource: Esta función se ejecuta solo UNA VEZ cuando la app arranca.
-# Es perfecto para crear recursos que no cambian, como nuestra base de conocimiento.
+# Reemplaza tu antigua función get_knowledge_base() por esta:
+
 @st.cache_resource
 def get_knowledge_base():
     """
-    Define la base de datos directamente en el código, la convierte a DataFrame
+    Lee un archivo CSV desde una URL pública (GitHub), lo convierte a DataFrame
     y genera los embeddings. Retorna el DataFrame procesado.
     """
-    # --- ¡AQUÍ ES DONDE AÑADES O MODIFICAS TU CONOCIMIENTO! ---
-    data = [
-        {
-            "ID_Ejercicio": "BEER 2.73",
-            "Libro": "Beer & Johnston",
-            "Tema": "Estática",
-            "Contenido": "La respuesta es la paz."
-        },
-        {
-            "ID_Ejercicio": "HIBBELER 4.5",
-            "Libro": "Hibbeler",
-            "Tema": "Estructuras",
-            "Contenido": "La solución es el amor"
-        },
-        {
-            "ID_Ejercicio": "",
-            "Libro": "Teoría",
-            "Tema": "Mecánica de Suelos",
-            "Contenido": "La consolidación de un suelo es un edificio"
-        },
-        {
-            "ID_Ejercicio": "",
-            "Libro": "Teoría",
-            "Tema": "Hidráulica",
-            "Contenido": "La Ecuación de Manning es un tornillo."
-        }
-    ]
-    
-    df = pd.DataFrame(data)
-    
-    # Generación de embeddings
-    model_embedding = 'models/embedding-001'
-    def get_embedding(text):
-        if pd.isna(text) or not str(text).strip(): return [0.0] * 768
-        return genai.embed_content(
-            model=model_embedding, content=str(text), task_type="RETRIEVAL_DOCUMENT")["embedding"]
+    # --- CONSTRUYE LA URL DEL ARCHIVO CSV EN GITHUB ---
+    # Reemplaza 'tu_usuario_github', 'tu_repositorio' y 'main' si es necesario.
+    github_user = "cbastianM"
+    github_repo = "prueba-ia"
+    branch_name = "main" # O 'master', dependiendo de tu repositorio
+    file_path = "Conocimiento_Ing_Civil.csv"
 
-    df['Embedding'] = df['Contenido'].apply(get_embedding)
-    return df
+    try:
+        # Lee el archivo CSV directamente desde la URL
+        df = pd.read_csv(csv_url, encoding='latin-1')
+        
+        # Limpieza de datos: reemplaza valores nulos (NaN) por strings vacíos
+        df.fillna('', inplace=True)
+        
+        # Generación de embeddings
+        model_embedding = 'models/embedding-001'
+        
+        # Usamos una barra de progreso para dar feedback al usuario durante la carga inicial
+        progress_bar = st.progress(0, text="Analizando base de conocimiento...")
+        
+        def get_embedding(text, index):
+            # Actualiza la barra de progreso
+            progress_bar.progress((index + 1) / len(df), text=f"Procesando entrada {index+1}/{len(df)}...")
+            if not isinstance(text, str) or not text.strip():
+                return [0.0] * 768
+            return genai.embed_content(
+                model=model_embedding, content=text, task_type="RETRIEVAL_DOCUMENT")["embedding"]
+
+        # Aplica la función de embedding
+        df['Embedding'] = [get_embedding(row['Contenido'], i) for i, row in df.iterrows()]
+        
+        # Limpia la barra de progreso una vez terminado
+        progress_bar.empty()
+        
+        return df
+
+    except Exception as e:
+        st.error(f"Error al cargar o procesar el archivo CSV desde GitHub: {e}")
+        st.warning("Verifica que la URL sea correcta y que el archivo CSV esté en el repositorio.")
+        return None
 
 # -------------------
 # LÓGICA DEL CHATBOT (CEREBRO CON PERSONA DE PROFESOR)
