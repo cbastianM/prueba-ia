@@ -92,7 +92,7 @@ if 'api_key' not in st.session_state:
 df_problems = load_data()
 
 # Interfaz principal
-st.title("🏗️ Tutor de Estática con Google Gemini")
+st.title("🏗️ Demo - Monitor de Estática")
 st.markdown("Pide la solución de un problema por su ID (ej: `resuelve problema 3`) o haz una pregunta general.")
 
 # Barra lateral
