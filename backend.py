@@ -66,7 +66,7 @@ def get_gemini_response(api_key, conversation_history, exercise_data):
     """
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.0-pro')
+        model = genai.GenerativeModel('gemma-3-12b-it')
         
         formatting_rules = """**REGLAS ESTRICTAS DE FORMATO MATEMÁTICO:** ... (etc.)"""
 
