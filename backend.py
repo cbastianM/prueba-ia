@@ -118,7 +118,8 @@ with st.sidebar:
 # ... (código sin cambios)
 if st.session_state.selected_problem:
     with st.expander("Detalles del Problema Seleccionado", expanded=True):
-        st.markdown("---")
+        
+st.markdown("---")
         # ... (muestra detalles)
 
 
