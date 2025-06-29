@@ -54,7 +54,7 @@ def get_gemini_response(api_key, conversation_history, exercise_data):
         # --- CAMBIO CLAVE: USANDO EL MODELO GEMMA 3 ---
         # Nota: El nombre exacto puede variar. Verifica en Google AI Studio si este no funciona.
         # Podría ser 'gemma-3-12b-it' o similar.
-        model = genai.GenerativeModel('models/gemma-3-12b-it')
+        model = genai.GenerativeModel('gemma-3-12b-it')
         
         formatting_rules = """
         ### MANUAL DE ESTILO MATEMÁTICO (OBLIGATORIO) ###
