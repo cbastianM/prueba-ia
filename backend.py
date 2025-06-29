@@ -87,11 +87,11 @@ with st.sidebar:
     with st.container(border=True):
         st.markdown("#### ✨ Versión Pro")
         st.write(
-            "Desbloquea ejercicios ilimitados, explicaciones avanzadas y soporte prioritario."
+            "Desbloquea ejercicios y soporte prioritario."
         )
         st.link_button(
             "Conoce los beneficios 🚀",
-            "https://www.tu-pagina-de-precios.com", # <-- ¡REEMPLAZA ESTA URL!
+            "https://sites.google.com/view/monitor-ia/pro", # <-- ¡REEMPLAZA ESTA URL!
             help="Haz clic para ver todas las ventajas de la versión Pro."
         )
     # --- FIN DE LA SECCIÓN MODIFICADA ---
