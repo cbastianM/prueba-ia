@@ -3,7 +3,7 @@ import pandas as pd
 import google.generativeai as genai
 import re
 
-# --- Configuración de la Página de Streamlit (Sin cambios) ---
+# --- Configuración de la Página de Streamlit ---
 st.set_page_config(
     page_title="Tutor de Estática con Gemini",
     page_icon="🏗️",
@@ -25,15 +25,13 @@ def load_data():
         st.error("ERROR CRÍTICO: No se encontró 'database/statics_problems.csv'.")
         return None
 
-# --- FUNCIÓN DE BÚSQUEDA TOTALMENTE NUEVA Y ROBUSTA ---
 def find_exercise(query, df):
     """
     Busca un ejercicio usando una estrategia de 3 niveles: ID preciso, tema y enunciado.
     """
     normalized_query = query.lower()
 
-    # --- Nivel 1: Búsqueda por ID preciso (ej. "beer 2.43") ---
-    # Regex para buscar patrones como 'libro numero.numero'
+    # Nivel 1: Búsqueda por ID preciso (ej. "beer 2.43")
     match = re.search(r'(beer|hibbeler)\s*(\d+[\.\-]\d+)', normalized_query)
     if match:
         book = match.group(1).strip()
@@ -42,31 +40,25 @@ def find_exercise(query, df):
         
         result_df = df[df['id'] == search_id]
         if not result_df.empty:
-            # st.toast(f"Encontrado por ID preciso: {search_id}") # Para depuración
             return result_df.to_dict('records')[0]
 
-    # --- Nivel 2: Búsqueda por palabras clave en la columna "tema" ---
-    # Ignoramos palabras comunes para hacer la búsqueda más relevante
+    # Nivel 2: Búsqueda por palabras clave en la columna "tema"
     stopwords = ['el', 'la', 'un', 'una', 'de', 'del', 'me', 'puedes', 'explica', 
                  'explícame', 'resuelve', 'problema', 'ejercicio', 'ayuda', 'con']
     keywords = [word for word in normalized_query.split() if word not in stopwords and len(word) > 2]
     
     for keyword in keywords:
-        # `na=False` evita errores si hay celdas vacías
         result_df = df[df['tema'].str.contains(keyword, case=False, na=False)]
         if not result_df.empty:
-            # st.toast(f"Encontrado por tema con keyword: '{keyword}'") # Para depuración
-            return result_df.iloc[0].to_dict() # Devuelve el primer resultado que coincida
+            return result_df.iloc[0].to_dict()
 
-    # --- Nivel 3: Búsqueda por palabras clave en la columna "enunciado" ---
+    # Nivel 3: Búsqueda por palabras clave en la columna "enunciado"
     for keyword in keywords:
         result_df = df[df['enunciado'].str.contains(keyword, case=False, na=False)]
         if not result_df.empty:
-            # st.toast(f"Encontrado por enunciado con keyword: '{keyword}'") # Para depuración
             return result_df.iloc[0].to_dict()
 
-    return None # Si ningún método funciona, no se encontró nada.
-
+    return None
 
 def get_gemini_response(api_key, conversation_history, exercise_data):
     """
@@ -74,13 +66,14 @@ def get_gemini_response(api_key, conversation_history, exercise_data):
     """
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemma-3-12b-it')
+        model = genai.GenerativeModel('gemini-1.0-pro')
         
-        # El prompt detallado y estricto que ya teníamos funciona bien aquí
+        formatting_rules = """**REGLAS ESTRICTAS DE FORMATO MATEMÁTICO:** ... (etc.)"""
+
         if exercise_data:
             system_context = f"""
             Tu rol es ser un tutor experto de Estática...
-            **REGLAS ESTRICTAS DE FORMATO...**
+            {formatting_rules}
             **DATOS DEL PROBLEMA:**
             - ID: {exercise_data['id']}
             - Enunciado: {exercise_data['enunciado']}
@@ -88,7 +81,7 @@ def get_gemini_response(api_key, conversation_history, exercise_data):
             - Respuesta: {exercise_data['respuesta']}
             """
         else:
-            system_context = "Tu rol es ser un tutor general de Estática..."
+            system_context = f"Tu rol es ser un tutor general de Estática... {formatting_rules}"
         
         prompt_parts = [system_context, "\n--- HISTORIAL ---"]
         for message in conversation_history:
@@ -100,7 +93,7 @@ def get_gemini_response(api_key, conversation_history, exercise_data):
         st.error(f"Error al contactar la API de Google Gemini: {e}")
         return None
 
-# --- RESTO DEL CÓDIGO ---
+# --- INICIO DE LA APLICACIÓN ---
 
 # Inicialización de la memoria de la sesión
 if 'selected_problem' not in st.session_state:
@@ -112,12 +105,51 @@ if 'api_key' not in st.session_state:
 
 df_problems = load_data()
 
-# Interfaz principal y barra lateral (sin cambios)
-st.title("🏗️ Tutor de Estática con Google Gemini")
-st.markdown("Pide un ejercicio por su ID (ej: `beer 2.43`) o por tema (ej: `lámpara en equilibrio`).")
-# ... (código de la sidebar) ...
+# --- BARRA LATERAL RESTAURADA ---
+with st.sidebar:
+    st.header("🔑 Configuración")
+    with st.form("api_key_form"):
+        api_key_input = st.text_input("Ingresa tu API Key de Google AI", type="password", help="Necesaria para activar el tutor.")
+        submitted = st.form_submit_button("Guardar Clave")
+        if submitted:
+            if api_key_input: st.session_state.api_key = api_key_input; st.success("¡API Key guardada!")
+            else: st.warning("El campo de la API Key está vacío.")
+    with st.expander("❓ ¿Cómo obtener una API Key?"):
+        st.markdown("1. Ve a [Google AI Studio](https://aistudio.google.com/).\n2. Clic en **'Get API key'** y crea tu clave.")
+    st.markdown("---")
+    with st.container(border=True):
+        st.markdown("#### ✨ Versión Pro")
+        st.write("Desbloquea más ejercicios y soporte prioritario.")
+        st.markdown("[Conoce los beneficios 🚀](https://www.tu-pagina-de-precios.com)") # Reemplaza con tu URL
+    st.markdown("---")
+    st.header("📚 Ejercicios Disponibles")
+    if df_problems is not None:
+        for index, row in df_problems.iterrows():
+            st.markdown(f"- **ID: {row['id']}** ({row['tema']})")
+    else:
+        st.error("No se pudieron cargar los ejercicios.")
 
-# Lógica del chat principal (actualizada para usar la nueva función)
+# Interfaz principal
+st.title("🏗️ Tutor de Estática con Google Gemini")
+st.markdown("Pide un ejercicio por su ID (ej: `beer 2.43`), por tema, o por parte del enunciado.")
+
+# Mostrar detalles del problema si uno está seleccionado
+if st.session_state.selected_problem:
+    with st.expander("Detalles del Problema Seleccionado", expanded=True):
+        prob = st.session_state.selected_problem
+        st.markdown(f"**ID:** {prob['id']} | **Libro:** {prob['libro']}")
+        st.markdown(f"**Enunciado:** {prob['enunciado']}")
+        if pd.notna(prob['imagen_url']):
+            st.markdown(f"**Material Visual:** [**Haga clic aquí para abrir**]({prob['imagen_url']})")
+
+st.markdown("---")
+
+# Mostrar historial de chat
+for message in st.session_state.chat_history:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
+
+# Lógica del chat principal
 if prompt := st.chat_input("¿Qué quieres aprender hoy?"):
     if not st.session_state.api_key:
         st.warning("Por favor, ingresa y guarda tu API Key en la barra lateral."); st.stop()
@@ -129,15 +161,19 @@ if prompt := st.chat_input("¿Qué quieres aprender hoy?"):
     
     # INTENCIÓN 1: Pedir material visual
     if any(keyword in prompt.lower() for keyword in visual_keywords) and st.session_state.selected_problem:
-        # ... (lógica sin cambios)
-        pass # La lógica existente aquí es correcta
+        prob = st.session_state.selected_problem
+        with st.chat_message("assistant"):
+            if pd.notna(prob['imagen_url']):
+                assistant_response = f"¡Claro! Aquí tienes el enlace al material visual del problema **{prob['id']}**: [**Abrir Imagen/PDF**]({prob['imagen_url']})"
+            else:
+                assistant_response = f"Lo siento, el problema **{prob['id']}** no tiene un material visual asociado."
+            st.markdown(assistant_response)
+        st.session_state.chat_history.append({"role": "assistant", "content": assistant_response})
     
     # INTENCIÓN 2 Y 3: Seleccionar problema o pregunta general
     else:
-        # Usamos la nueva y potente función de búsqueda
         found_exercise = find_exercise(prompt, df_problems)
         
-        # Comprobamos si el problema encontrado es diferente al que ya está seleccionado
         if found_exercise and (st.session_state.selected_problem is None or st.session_state.selected_problem['id'] != found_exercise['id']):
             st.session_state.selected_problem = found_exercise
             with st.chat_message("assistant"):
@@ -146,13 +182,12 @@ if prompt := st.chat_input("¿Qué quieres aprender hoy?"):
                     response = get_gemini_response(st.session_state.api_key, initial_history, st.session_state.selected_problem)
                     if response:
                         st.markdown(response)
-                        # Creamos un nuevo historial para esta conversación
                         st.session_state.chat_history.append({"role": "assistant", "content": response})
                     else:
                         st.error("No se pudo generar la explicación inicial.")
             st.rerun()
         
-        else: # Si no se encontró un problema nuevo, es una pregunta de seguimiento
+        else:
             with st.chat_message("assistant"):
                 with st.spinner("Pensando... 🤔"):
                     response = get_gemini_response(st.session_state.api_key, st.session_state.chat_history, st.session_state.selected_problem)
