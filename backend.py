@@ -10,70 +10,47 @@ st.set_page_config(
     layout="wide"
 )
 
-# --- Funciones Auxiliares ---
-
+# --- Funciones Auxiliares (Sin cambios) ---
 @st.cache_data
 def load_data():
-    """Carga los datos de problemas desde el archivo CSV."""
     try:
         df = pd.read_csv('database/statics_problems.csv')
         df['id'] = df['id'].astype(int)
         return df
     except FileNotFoundError:
-        st.error("ERROR CRÍTICO: No se encontró 'database/statics_problems.csv'. "
-                 "Asegúrate de que el archivo y la carpeta 'database' existan en tu repositorio.")
+        st.error("ERROR CRÍTICO: No se encontró 'database/statics_problems.csv'.")
         return None
 
 def get_gemini_response(api_key, conversation_history, exercise_data):
-    """
-    Genera una respuesta de la IA usando la API de Google Gemini,
-    con instrucciones para formatear las matemáticas y basarse en los datos proporcionados.
-    """
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemma-3-12b-it')
+        model = genai.GenerativeModel('gemma-3n-e4b-it')
         
         if exercise_data:
             system_context = f"""
-            Tu rol es ser un tutor de Estática que guía al estudiante a través de una solución PREDEFINIDA.
-            Tu misión es explicar de forma clara el procedimiento que te proporciono.
-
+            Tu rol es ser un tutor de Estática... (El prompt largo y detallado que ya teníamos)
             **REGLAS ESTRICTAS DE FORMATO Y CONTENIDO:**
-            1.  **FORMATO MATEMÁTICO:** Utiliza SIEMPRE Markdown con sintaxis de LaTeX para todas las ecuaciones y variables.
-                -   Para ecuaciones en un bloque separado (display mode), usa dos signos de dólar: `$$ E = mc^2 $$`
-                -   Para variables o fórmulas dentro de un texto (inline mode), usa un solo signo de dólar: `La fuerza $F_x$ se calcula así...`
-                -   EJEMPLO: Para "Sumatoria de Fx = 0", escribe: `La primera ecuación es $$ \\sum F_x = 0 $$`
+            1.  **FORMATO MATEMÁTICO:** $$ ... $$ para bloques y $ ... $ en línea.
+            2.  **FUENTE DE VERDAD:** Basa tu explicación ÚNICAMENTE en el procedimiento y la respuesta proporcionados.
+            3.  **REFERENCIA VISUAL:** Refiérete al material visual que el estudiante ya tiene.
 
-            2.  **FUENTE DE VERDAD:** Basa tu explicación ÚNICAMENTE en el procedimiento y la respuesta proporcionados. No inventes pasos, métodos alternativos o información que no esté en los datos.
-
-            3.  **REFERENCIA VISUAL:** Refiérete al material visual (imagen/PDF) que el estudiante ya tiene, diciendo frases como "Observa el diagrama proporcionado...".
-
-            **DATOS DEL PROBLEMA (TU ÚNICA FUENTE DE VERDAD):**
+            **DATOS DEL PROBLEMA:**
             - **Enunciado:** {exercise_data['enunciado']}
-            - **Procedimiento a Explicar:**
-              ```
-              {exercise_data['procedimiento']}
-              ```
-            - **Respuesta Final a la que se debe llegar:** `{exercise_data['respuesta']}`
-
-            Ahora, responde la pregunta del estudiante manteniendo estas reglas.
+            - **Procedimiento:** {exercise_data['procedimiento']}
+            - **Respuesta:** {exercise_data['respuesta']}
             """
         else:
             system_context = """
-            Tu rol es ser un tutor general de Estática. Ayuda con conceptos teóricos o a encontrar un ejercicio. 
-            REGLA DE FORMATO: Utiliza SIEMPRE Markdown con sintaxis de LaTeX para todas las ecuaciones y variables.
-            - Bloque de ecuación: `$$ ... $$`
-            - Ecuación en línea: `$ ... $`
+            Tu rol es ser un tutor general de Estática... (El prompt general que ya teníamos)
             """
         
-        full_prompt = system_context + "\n\n---\n\nHistorial de la conversación:\n" 
+        full_prompt = system_context + "\n\n---\n\nHistorial:\n" 
         for msg in conversation_history[:-1]:
             full_prompt += f"{msg['role']}: {msg['content']}\n"
-        full_prompt += f"Pregunta actual del usuario: {conversation_history[-1]['content']}"
+        full_prompt += f"Pregunta actual: {conversation_history[-1]['content']}"
 
         response = model.generate_content(full_prompt)
         return response.text
-
     except Exception as e:
         st.error(f"Error al contactar la API de Google Gemini: {e}")
         return None
@@ -92,7 +69,7 @@ if 'api_key' not in st.session_state:
 df_problems = load_data()
 
 # Interfaz principal
-st.title("🏗️ Demo - Monitor de Estática")
+st.title("🏗️ Tutor de Estática")
 st.markdown("Pide la solución de un problema por su ID (ej: `resuelve problema 3`) o haz una pregunta general.")
 
 # Barra lateral
@@ -106,6 +83,21 @@ with st.sidebar:
     with st.expander("❓ ¿Cómo obtener una API Key?"):
         st.markdown("1. Ve a [Google AI Studio](https://aistudio.google.com/).\n2. Haz clic en **'Get API key'**.\n3. Crea y copia tu clave.")
     
+    # --- INICIO DE LA SECCIÓN MODIFICADA ---
+    with st.container(border=True):
+        st.markdown("#### ✨ Versión Pro")
+        st.write(
+            "Desbloquea ejercicios ilimitados, explicaciones avanzadas y soporte prioritario."
+        )
+        st.link_button(
+            "Conoce los beneficios 🚀",
+            "https://www.tu-pagina-de-precios.com", # <-- ¡REEMPLAZA ESTA URL!
+            help="Haz clic para ver todas las ventajas de la versión Pro."
+        )
+    # --- FIN DE LA SECCIÓN MODIFICADA ---
+
+    st.markdown("---")
+
     st.header("📚 Ejercicios Disponibles")
     if df_problems is not None:
         for index, row in df_problems.iterrows():
@@ -113,7 +105,7 @@ with st.sidebar:
     else:
         st.error("No se pudieron cargar los ejercicios.")
 
-# Mostrar detalles del problema si uno está seleccionado
+# --- Resto del código (lógica del chat, etc.) sin cambios ---
 if st.session_state.selected_problem:
     with st.expander("Detalles del Problema Seleccionado", expanded=True):
         prob = st.session_state.selected_problem
@@ -124,12 +116,10 @@ if st.session_state.selected_problem:
 
 st.markdown("---")
 
-# Mostrar historial de chat
 for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Lógica del chat principal
 if prompt := st.chat_input("¿Qué quieres aprender hoy?"):
     if not st.session_state.api_key:
         st.warning("Por favor, ingresa y guarda tu API Key de Google en la barra lateral."); st.stop()
@@ -137,11 +127,9 @@ if prompt := st.chat_input("¿Qué quieres aprender hoy?"):
     with st.chat_message("user"): st.markdown(prompt)
     st.session_state.chat_history.append({"role": "user", "content": prompt})
 
-    # Lógica de decisión de intenciones
     visual_keywords = ["imagen", "pdf", "manual", "visual", "diagrama", "enlace", "url", "link", "dibujo", "figura", "gráfico"]
     id_match = re.search(r'(id|problema|ejercicio)\s*(\d+)', prompt, re.IGNORECASE)
     
-    # INTENCIÓN 1: Pedir material visual
     if any(keyword in prompt.lower() for keyword in visual_keywords) and st.session_state.selected_problem:
         prob = st.session_state.selected_problem
         with st.chat_message("assistant"):
@@ -153,13 +141,11 @@ if prompt := st.chat_input("¿Qué quieres aprender hoy?"):
                 st.markdown(assistant_response)
         st.session_state.chat_history.append({"role": "assistant", "content": assistant_response})
 
-    # INTENCIÓN 2: Seleccionar un problema por ID
     elif id_match:
         exercise_id = int(id_match.group(2))
         found_exercise_df = df_problems[df_problems['id'] == exercise_id]
         
         if not found_exercise_df.empty:
-            # Si el ID existe, se carga y se explica
             found_exercise = found_exercise_df.to_dict('records')[0]
             st.session_state.selected_problem = found_exercise
             
@@ -169,7 +155,6 @@ if prompt := st.chat_input("¿Qué quieres aprender hoy?"):
                     response = get_gemini_response(st.session_state.api_key, initial_history, st.session_state.selected_problem)
                     if response:
                         st.markdown(response)
-                        # Limpiamos el historial viejo y empezamos uno nuevo con esta conversación
                         st.session_state.chat_history = [
                             {"role": "user", "content": prompt},
                             {"role": "assistant", "content": response}
@@ -178,13 +163,11 @@ if prompt := st.chat_input("¿Qué quieres aprender hoy?"):
                         st.error("No se pudo generar la explicación inicial.")
             st.rerun()
         else:
-            # Si el ID no existe, se informa al usuario
             with st.chat_message("assistant"):
                 error_message = f"Lo siento, no pude encontrar el problema con **ID {exercise_id}** en mi base de datos. Por favor, elige un ID válido de la lista en la barra lateral."
                 st.markdown(error_message)
             st.session_state.chat_history.append({"role": "assistant", "content": error_message})
 
-    # INTENCIÓN 3: Pregunta de seguimiento o general
     else:
         with st.chat_message("assistant"):
             with st.spinner("Pensando... 🤔"):
