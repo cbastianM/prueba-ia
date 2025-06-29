@@ -31,26 +31,60 @@ def find_exercise_by_string_id(query, df):
             return result_df.to_dict('records')[0]
     return None
 
+# --- INICIO DE LA SECCIÓN MODIFICADA: FUNCIÓN GET_GEMINI_RESPONSE ---
 def get_gemini_response(api_key, conversation_history, exercise_data):
+    """
+    Genera una respuesta de la IA con instrucciones de formato matemático ultra-explícitas.
+    """
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemma-3-12b-it')
+        model = genai.GenerativeModel('gemini-1.0-pro')
         
+        # Este es el prompt del sistema que define el rol y las reglas de la IA.
+        # Es la parte más importante para obtener el formato deseado.
+        
+        # Definimos las reglas de formato una vez para no repetirlas.
+        formatting_rules = """
+        **REGLAS ESTRICTAS DE FORMATO MATEMÁTICO:**
+        1.  **DEBES** usar sintaxis LaTeX para **TODO** el contenido matemático.
+            -   Para bloques de ecuaciones (en su propia línea), usa dos signos de dólar: `$$ ... $$`
+            -   Para fórmulas o variables dentro de un párrafo (en línea), usa un solo signo de dólar: `$ ... $`
+
+        2.  **NUNCA** uses caracteres Unicode sueltos para símbolos matemáticos.
+        3.  **NUNCA** uses etiquetas HTML como `<sub>` para subíndices o `<sup>` para superíndices.
+
+        **GUÍA DE ESTILO Y EJEMPLOS (OBLIGATORIOS):**
+        -   **Sumatorias:** Para "Sumatoria de Fx", escribe `$\\sum F_x$`
+        -   **Subíndices:** Para "T_ABx", escribe `$T_{AB,x}$`. Para "Fx", escribe `$F_x$`.
+        -   **Letras Griegas:** Para "theta" o "alpha", escribe `$\\theta$` o `$\\alpha$`.
+        -   **Vectores:** Para indicar que F es un vector, escribe `$\\vec{F}$`.
+        -   **Fracciones:** Para "1/2", escribe `$\\frac{1}{2}$`.
+        """
+
         if exercise_data:
             system_context = f"""
-            Tu rol es ser un tutor de Estática... (El prompt largo y detallado que ya teníamos)
-            **REGLAS ESTRICTAS:**
-            1.  **FORMATO MATEMÁTICO:** Usa `$$...$$` para bloques y `$..$` en línea.
-            2.  **FUENTE DE VERDAD:** Basa tu explicación ÚNICAMENTE en el procedimiento y respuesta proporcionados.
-            3.  **REFERENCIA VISUAL:** Refiérete al material visual que el estudiante ya tiene.
-            **DATOS DEL PROBLEMA:**
+            Tu rol es ser un tutor experto en Estática que guía al estudiante a través de una solución PREDEFINIDA.
+
+            {formatting_rules}
+
+            **REGLAS DE CONTENIDO:**
+            - Basa tu explicación **ÚNICAMENTE** en el procedimiento y la respuesta proporcionados. No inventes pasos.
+            - Refiérete al material visual (imagen/PDF) que el estudiante ya tiene disponible.
+
+            **DATOS DEL PROBLEMA (TU ÚNICA FUENTE DE VERDAD):**
             - ID: {exercise_data['id']}
             - Enunciado: {exercise_data['enunciado']}
-            - Procedimiento: {exercise_data['procedimiento']}
-            - Respuesta: {exercise_data['respuesta']}
+            - Procedimiento a Explicar: ```{exercise_data['procedimiento']}```
+            - Respuesta Final: `{exercise_data['respuesta']}`
+
+            Ahora, responde la pregunta del estudiante manteniendo todas estas reglas.
             """
         else:
-            system_context = "Tu rol es ser un tutor general de Estática..."
+            system_context = f"""
+            Tu rol es ser un tutor general de Estática. Ayuda con conceptos teóricos.
+            {formatting_rules}
+            Ahora, responde la pregunta del estudiante.
+            """
         
         prompt_parts = [system_context, "\n--- HISTORIAL DE CONVERSACIÓN ---"]
         for message in conversation_history:
@@ -63,8 +97,9 @@ def get_gemini_response(api_key, conversation_history, exercise_data):
     except Exception as e:
         st.error(f"Error al contactar la API de Google Gemini: {e}")
         return None
+# --- FIN DE LA SECCIÓN MODIFICADA ---
 
-# --- INICIO DE LA APLICACIÓN ---
+# --- RESTO DEL CÓDIGO (SIN CAMBIOS) ---
 
 # Inicialización de la memoria de la sesión
 if 'selected_problem' not in st.session_state:
@@ -76,54 +111,28 @@ if 'api_key' not in st.session_state:
 
 df_problems = load_data()
 
-# --- INICIO DE LA SECCIÓN CORREGIDA: BARRA LATERAL ---
 with st.sidebar:
     st.header("🔑 Configuración")
-    
-    # Usamos un formulario para agrupar los widgets de la API Key.
-    # Esto asegura que se envíen juntos y previene reruns no deseados.
     with st.form("api_key_form"):
-        api_key_input = st.text_input(
-            "Ingresa tu API Key de Google AI", 
-            type="password",
-            help="Necesaria para activar el tutor de IA."
-        )
+        api_key_input = st.text_input("Ingresa tu API Key de Google AI", type="password", help="Necesaria para activar el tutor.")
         submitted = st.form_submit_button("Guardar Clave")
-        
         if submitted:
-            if api_key_input:
-                st.session_state.api_key = api_key_input
-                st.success("¡API Key guardada correctamente!")
-            else:
-                st.warning("El campo de la API Key está vacío.")
-
+            if api_key_input: st.session_state.api_key = api_key_input; st.success("¡API Key guardada!")
+            else: st.warning("El campo de la API Key está vacío.")
     with st.expander("❓ ¿Cómo obtener una API Key?"):
-        st.markdown("""
-        1.  Ve a [Google AI Studio](https://aistudio.google.com/).
-        2.  Inicia sesión y haz clic en **'Get API key'**.
-        3.  Crea una nueva clave en tu proyecto y cópiala.
-        """)
-
+        st.markdown("1. Ve a [Google AI Studio](https://aistudio.google.com/).\n2. Clic en **'Get API key'** y crea tu clave.")
     st.markdown("---")
-
-    # Separamos la sección "Pro" en su propio contenedor
     with st.container(border=True):
         st.markdown("#### ✨ Versión Pro")
         st.write("Desbloquea más ejercicios y soporte prioritario.")
-        # Usamos markdown para el enlace, que es más estable que link_button
-        st.markdown("[Conoce los beneficios 🚀](https://www.tu-pagina-de-precios.com)") # Reemplaza con tu URL
-
+        st.markdown("[Conoce los beneficios 🚀](https://www.tu-pagina-de-precios.com)")
     st.markdown("---")
-
     st.header("📚 Ejercicios Disponibles")
     if df_problems is not None:
         for index, row in df_problems.iterrows():
             st.markdown(f"- **ID: {row['id']}** ({row['tema']})")
-    else:
-        st.error("No se pudieron cargar los ejercicios.")
-# --- FIN DE LA SECCIÓN CORREGIDA: BARRA LATERAL ---
+    else: st.error("No se pudieron cargar los ejercicios.")
 
-# Interfaz principal
 st.title("🏗️ Tutor de Estática con Google Gemini")
 st.markdown("Pide un ejercicio por su nombre y número (ej: `explica beer 2.43`)")
 
@@ -141,7 +150,6 @@ for message in st.session_state.chat_history:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# Lógica de Chat (sin cambios)
 if prompt := st.chat_input("¿Qué quieres aprender hoy?"):
     if not st.session_state.api_key:
         st.warning("Por favor, ingresa y guarda tu API Key en la barra lateral."); st.stop()
