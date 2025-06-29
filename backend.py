@@ -177,3 +177,6 @@ if prompt := st.chat_input("¿Qué quieres aprender hoy?"):
                 st.session_state.chat_history.append({"role": "assistant", "content": response})
             else: 
                 st.error("No se pudo obtener una respuesta.")
+
+
+https://demo-ia.streamlit.app/?embed_options=dark_theme
