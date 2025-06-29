@@ -34,7 +34,7 @@ def find_exercise_by_string_id(query, df):
 def get_gemini_response(api_key, conversation_history, exercise_data):
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.0-pro')
+        model = genai.GenerativeModel('gemma-3-12b-it')
         
         if exercise_data:
             system_context = f"""
