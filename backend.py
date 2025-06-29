@@ -118,9 +118,9 @@ with st.sidebar:
 # ... (código sin cambios)
 if st.session_state.selected_problem:
     with st.expander("Detalles del Problema Seleccionado", expanded=True):
+        st.markdown("---")
         # ... (muestra detalles)
 
-st.markdown("---")
 
 # Mostrar historial de chat
 # ... (código sin cambios)
