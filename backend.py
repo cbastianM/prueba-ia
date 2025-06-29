@@ -38,7 +38,7 @@ def get_gemini_response(api_key, conversation_history, exercise_data):
     """
     try:
         genai.configure(api_key=api_key)
-        model = genai.GenerativeModel('gemini-1.0-pro')
+        model = genai.GenerativeModel('gemma-3-12b-it')
         
         # Este es el prompt del sistema que define el rol y las reglas de la IA.
         # Es la parte más importante para obtener el formato deseado.
